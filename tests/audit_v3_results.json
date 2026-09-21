@@ -1,0 +1,2006 @@
+{
+  "timestamp": "2026-09-20 14:05:44",
+  "corpus_size": 35,
+  "benchmark_metrics": {
+    "total_queries": 112,
+    "positive_queries": 104,
+    "negative_queries": 8,
+    "hit_at_1": 0.6346153846153846,
+    "hit_at_3": 0.7403846153846154,
+    "hit_at_5": 0.7692307692307693,
+    "hit_at_10": 0.8173076923076923,
+    "precision_at_5": 0.15384615384615385,
+    "precision_at_10": 0.08173076923076923,
+    "recall_at_10": 0.8173076923076923,
+    "mrr": 0.6948985042735043,
+    "ndcg_at_10": 0.724288178108259,
+    "latency_p50_ms": 6.783300006645732,
+    "latency_p95_ms": 8.48210000549443,
+    "latency_p99_ms": 18.97140000073705,
+    "negative_max_score": 0.3325,
+    "negative_mean_score": 0.249375
+  },
+  "ablation_results": {
+    "0.0": {
+      "Hit@1": 0.6346153846153846,
+      "Hit@3": 0.7403846153846154,
+      "Hit@5": 0.7692307692307693,
+      "Hit@10": 0.8173076923076923,
+      "Recall@10": 0.8173076923076923,
+      "MRR": 0.6948985042735043,
+      "nDCG@10": 0.724288178108259
+    },
+    "0.15": {
+      "Hit@1": 0.6346153846153846,
+      "Hit@3": 0.7403846153846154,
+      "Hit@5": 0.7692307692307693,
+      "Hit@10": 0.8173076923076923,
+      "Recall@10": 0.8173076923076923,
+      "MRR": 0.6948985042735043,
+      "nDCG@10": 0.724288178108259
+    },
+    "0.35": {
+      "Hit@1": 0.6346153846153846,
+      "Hit@3": 0.7403846153846154,
+      "Hit@5": 0.7692307692307693,
+      "Hit@10": 0.8173076923076923,
+      "Recall@10": 0.8173076923076923,
+      "MRR": 0.6948985042735043,
+      "nDCG@10": 0.724288178108259
+    },
+    "0.5": {
+      "Hit@1": 0.6346153846153846,
+      "Hit@3": 0.7403846153846154,
+      "Hit@5": 0.7692307692307693,
+      "Hit@10": 0.8173076923076923,
+      "Recall@10": 0.8173076923076923,
+      "MRR": 0.6948985042735043,
+      "nDCG@10": 0.724288178108259
+    },
+    "0.7": {
+      "Hit@1": 0.6346153846153846,
+      "Hit@3": 0.7403846153846154,
+      "Hit@5": 0.7692307692307693,
+      "Hit@10": 0.8173076923076923,
+      "Recall@10": 0.8173076923076923,
+      "MRR": 0.6948985042735043,
+      "nDCG@10": 0.724288178108259
+    },
+    "1.0": {
+      "Hit@1": 0.33653846153846156,
+      "Hit@3": 0.5480769230769231,
+      "Hit@5": 0.6346153846153846,
+      "Hit@10": 0.8173076923076923,
+      "Recall@10": 0.8173076923076923,
+      "MRR": 0.47009310134310134,
+      "nDCG@10": 0.5513262898106857
+    }
+  },
+  "latency_breakdown": {
+    "bm25_p50_ms": 1.59,
+    "bm25_p95_ms": 2.93,
+    "du_search_p50_ms": 2.23,
+    "du_search_p95_ms": 4.25,
+    "cache_hash_lookup_p50_ms": 1.67,
+    "cache_hash_lookup_p95_ms": 2.49,
+    "sbert_embed_p50_ms": 7.03,
+    "clip_text_embed_p50_ms": 20.77,
+    "qwen_doc_understanding_live_ms": 16945.96,
+    "qwen_candidate_reranking_live_ms": 5054.83,
+    "cold_first_query_ms": 9.57,
+    "warm_p50_ms": 6.783300006645732,
+    "warm_p95_ms": 8.48210000549443
+  },
+  "fallback_test": {
+    "status": "PASS",
+    "returned_results": 5,
+    "top_result": "FILE_A01.jpg",
+    "latency_ms": 11.44
+  },
+  "per_query_results": [
+    {
+      "query": "golden retriever dog in park",
+      "category": "Animals",
+      "expected_target": "CORPUS_001",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": 1,
+      "final_score": 0.3444,
+      "components": {
+        "lexical_bm25": 0.052,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.04
+    },
+    {
+      "query": "cute red panda on tree branch",
+      "category": "Animals",
+      "expected_target": "CORPUS_002",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.19
+    },
+    {
+      "query": "barn owl flying with open wings",
+      "category": "Animals",
+      "expected_target": "CORPUS_003",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.65
+    },
+    {
+      "query": "dog playing with tennis ball",
+      "category": "Animals",
+      "expected_target": "CORPUS_001",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.38
+    },
+    {
+      "query": "endangered mammal in bamboo forest",
+      "category": "Animals",
+      "expected_target": "CORPUS_002",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 1,
+      "final_score": 0.3466,
+      "components": {
+        "lexical_bm25": 0.062,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.02
+    },
+    {
+      "query": "nocturnal predatory bird feathers",
+      "category": "Animals",
+      "expected_target": "CORPUS_003",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 4.86
+    },
+    {
+      "query": "canine pet outdoors on green lawn",
+      "category": "Animals",
+      "expected_target": "CORPUS_001",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.1
+    },
+    {
+      "query": "red electric sports car at charger",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_004",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.06
+    },
+    {
+      "query": "high speed bullet train at station",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_005",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.13
+    },
+    {
+      "query": "yellow school bus for children",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_006",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.63
+    },
+    {
+      "query": "crimson battery electric vehicle rapid charging",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_004",
+      "top_retrieved_filename": "FILE_C14.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.2
+    },
+    {
+      "query": "aerodynamic shinkansen railway locomotive",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_005",
+      "top_retrieved_filename": "FILE_V05.jpg",
+      "rank": 1,
+      "final_score": 0.3454,
+      "components": {
+        "lexical_bm25": 0.057,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 4.9
+    },
+    {
+      "query": "elementary student transit bus",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_006",
+      "top_retrieved_filename": "FILE_V06.jpg",
+      "rank": 1,
+      "final_score": 0.3481,
+      "components": {
+        "lexical_bm25": 0.069,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.77
+    },
+    {
+      "query": "sleek sports automobile plugged into power outlet",
+      "category": "Vehicles",
+      "expected_target": "CORPUS_004",
+      "top_retrieved_filename": "FILE_O09.jpg",
+      "rank": 3,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.93
+    },
+    {
+      "query": "vintage brass laboratory microscope",
+      "category": "Objects",
+      "expected_target": "CORPUS_007",
+      "top_retrieved_filename": "FILE_O07.jpg",
+      "rank": 1,
+      "final_score": 0.3446,
+      "components": {
+        "lexical_bm25": 0.053,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.09
+    },
+    {
+      "query": "six string sunburst acoustic guitar",
+      "category": "Objects",
+      "expected_target": "CORPUS_008",
+      "top_retrieved_filename": "FILE_O08.jpg",
+      "rank": 1,
+      "final_score": 0.3422,
+      "components": {
+        "lexical_bm25": 0.043,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.06
+    },
+    {
+      "query": "stainless steel espresso machine pulling coffee",
+      "category": "Objects",
+      "expected_target": "CORPUS_009",
+      "top_retrieved_filename": "FILE_O09.jpg",
+      "rank": 1,
+      "final_score": 0.3406,
+      "components": {
+        "lexical_bm25": 0.036,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.28
+    },
+    {
+      "query": "scientific instrument with optical lenses",
+      "category": "Objects",
+      "expected_target": "CORPUS_007",
+      "top_retrieved_filename": "FILE_O07.jpg",
+      "rank": 1,
+      "final_score": 0.3465,
+      "components": {
+        "lexical_bm25": 0.061,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.01
+    },
+    {
+      "query": "wooden musical instrument on stand",
+      "category": "Objects",
+      "expected_target": "CORPUS_008",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.83
+    },
+    {
+      "query": "dual boiler barista coffee maker",
+      "category": "Objects",
+      "expected_target": "CORPUS_009",
+      "top_retrieved_filename": "FILE_O09.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 4.96
+    },
+    {
+      "query": "magnification microscope on wooden desk",
+      "category": "Objects",
+      "expected_target": "CORPUS_007",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 10,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.11
+    },
+    {
+      "query": "surgeon in green scrubs operating room",
+      "category": "People",
+      "expected_target": "CORPUS_010",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.68
+    },
+    {
+      "query": "construction worker wearing hard hat and safety vest",
+      "category": "People",
+      "expected_target": "CORPUS_011",
+      "top_retrieved_filename": "FILE_P11.jpg",
+      "rank": 1,
+      "final_score": 0.3405,
+      "components": {
+        "lexical_bm25": 0.035,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.71
+    },
+    {
+      "query": "chef in white uniform garnishing pasta",
+      "category": "People",
+      "expected_target": "CORPUS_012",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.09
+    },
+    {
+      "query": "medical doctor performing surgery",
+      "category": "People",
+      "expected_target": "CORPUS_010",
+      "top_retrieved_filename": "FILE_K30.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.25
+    },
+    {
+      "query": "civil engineer inspecting building blueprints",
+      "category": "People",
+      "expected_target": "CORPUS_011",
+      "top_retrieved_filename": "FILE_P11.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.09
+    },
+    {
+      "query": "professional cook plating ravioli",
+      "category": "People",
+      "expected_target": "CORPUS_012",
+      "top_retrieved_filename": "FILE_P12.jpg",
+      "rank": 1,
+      "final_score": 0.3487,
+      "components": {
+        "lexical_bm25": 0.071,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 4.79
+    },
+    {
+      "query": "hospital surgeon with face mask",
+      "category": "People",
+      "expected_target": "CORPUS_010",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": 9,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 18.97
+    },
+    {
+      "query": "navy wool double breasted blazer",
+      "category": "Clothing",
+      "expected_target": "CORPUS_013",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": 1,
+      "final_score": 0.3447,
+      "components": {
+        "lexical_bm25": 0.054,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.66
+    },
+    {
+      "query": "scarlet red silk evening dress gown",
+      "category": "Clothing",
+      "expected_target": "CORPUS_014",
+      "top_retrieved_filename": "FILE_C14.jpg",
+      "rank": 1,
+      "final_score": 0.3409,
+      "components": {
+        "lexical_bm25": 0.037,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.76
+    },
+    {
+      "query": "trail running sneakers with neon yellow laces",
+      "category": "Clothing",
+      "expected_target": "CORPUS_015",
+      "top_retrieved_filename": "FILE_C15.jpg",
+      "rank": 1,
+      "final_score": 0.341,
+      "components": {
+        "lexical_bm25": 0.037,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.06
+    },
+    {
+      "query": "formal suit jacket with brass anchor buttons",
+      "category": "Clothing",
+      "expected_target": "CORPUS_013",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": 1,
+      "final_score": 0.3417,
+      "components": {
+        "lexical_bm25": 0.04,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.01
+    },
+    {
+      "query": "elegant crimson ball gown on hanger",
+      "category": "Clothing",
+      "expected_target": "CORPUS_014",
+      "top_retrieved_filename": "FILE_C14.jpg",
+      "rank": 1,
+      "final_score": 0.3432,
+      "components": {
+        "lexical_bm25": 0.047,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.86
+    },
+    {
+      "query": "athletic footwear with rugged rubber tread",
+      "category": "Clothing",
+      "expected_target": "CORPUS_015",
+      "top_retrieved_filename": "FILE_C15.jpg",
+      "rank": 1,
+      "final_score": 0.3446,
+      "components": {
+        "lexical_bm25": 0.053,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.9
+    },
+    {
+      "query": "dark blue tailored wool blazer",
+      "category": "Clothing",
+      "expected_target": "CORPUS_013",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": 1,
+      "final_score": 0.345,
+      "components": {
+        "lexical_bm25": 0.055,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.33
+    },
+    {
+      "query": "misty alpine pine forest at dawn",
+      "category": "Scenes",
+      "expected_target": "CORPUS_016",
+      "top_retrieved_filename": "FILE_S16.jpg",
+      "rank": 1,
+      "final_score": 0.3433,
+      "components": {
+        "lexical_bm25": 0.047,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.07
+    },
+    {
+      "query": "tokyo night alley with glowing neon signs",
+      "category": "Scenes",
+      "expected_target": "CORPUS_017",
+      "top_retrieved_filename": "FILE_S17.jpg",
+      "rank": 1,
+      "final_score": 0.3422,
+      "components": {
+        "lexical_bm25": 0.043,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.14
+    },
+    {
+      "query": "sahara desert sand dunes sunset orange sky",
+      "category": "Scenes",
+      "expected_target": "CORPUS_018",
+      "top_retrieved_filename": "FILE_P21.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.1
+    },
+    {
+      "query": "evergreen woods shrouded in morning fog",
+      "category": "Scenes",
+      "expected_target": "CORPUS_016",
+      "top_retrieved_filename": "FILE_S16.jpg",
+      "rank": 1,
+      "final_score": 0.3442,
+      "components": {
+        "lexical_bm25": 0.051,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.49
+    },
+    {
+      "query": "japanese street market lanterns at night",
+      "category": "Scenes",
+      "expected_target": "CORPUS_017",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.48
+    },
+    {
+      "query": "arid desert sand ridges and long shadows",
+      "category": "Scenes",
+      "expected_target": "CORPUS_018",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 9.54
+    },
+    {
+      "query": "atmospheric wilderness landscape with sunbeams",
+      "category": "Scenes",
+      "expected_target": "CORPUS_016",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.85
+    },
+    {
+      "query": "annual jazz and blues festival poster",
+      "category": "Posters",
+      "expected_target": "CORPUS_019",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.43
+    },
+    {
+      "query": "cybersecurity conference summit banner",
+      "category": "Posters",
+      "expected_target": "CORPUS_020",
+      "top_retrieved_filename": "FILE_P20.jpg",
+      "rank": 1,
+      "final_score": 0.3477,
+      "components": {
+        "lexical_bm25": 0.067,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.17
+    },
+    {
+      "query": "robotics competition challenge flyer",
+      "category": "Posters",
+      "expected_target": "CORPUS_021",
+      "top_retrieved_filename": "FILE_P21.jpg",
+      "rank": 1,
+      "final_score": 0.3377,
+      "components": {
+        "lexical_bm25": 0.053,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.31
+    },
+    {
+      "query": "music festival poster with saxophone silhouette",
+      "category": "Posters",
+      "expected_target": "CORPUS_019",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.19
+    },
+    {
+      "query": "zero trust digital lock infosec keynote poster",
+      "category": "Posters",
+      "expected_target": "CORPUS_020",
+      "top_retrieved_filename": "FILE_P20.jpg",
+      "rank": 1,
+      "final_score": 0.3366,
+      "components": {
+        "lexical_bm25": 0.042,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.47
+    },
+    {
+      "query": "autonomous rover engineering contest flyer",
+      "category": "Posters",
+      "expected_target": "CORPUS_021",
+      "top_retrieved_filename": "FILE_P11.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.04
+    },
+    {
+      "query": "purple music concert poster live at park",
+      "category": "Posters",
+      "expected_target": "CORPUS_019",
+      "top_retrieved_filename": "FILE_P19.jpg",
+      "rank": 1,
+      "final_score": 0.3369,
+      "components": {
+        "lexical_bm25": 0.045,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.48
+    },
+    {
+      "query": "official academic semester grade transcript",
+      "category": "Documents",
+      "expected_target": "CORPUS_022",
+      "top_retrieved_filename": "FILE_D22.pdf",
+      "rank": 1,
+      "final_score": 0.3434,
+      "components": {
+        "lexical_bm25": 0.048,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.02
+    },
+    {
+      "query": "residential apartment tenancy lease agreement",
+      "category": "Documents",
+      "expected_target": "CORPUS_023",
+      "top_retrieved_filename": "FILE_D23.pdf",
+      "rank": 1,
+      "final_score": 0.3428,
+      "components": {
+        "lexical_bm25": 0.045,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.71
+    },
+    {
+      "query": "distributed consensus algorithms whitepaper",
+      "category": "Documents",
+      "expected_target": "CORPUS_024",
+      "top_retrieved_filename": "FILE_D24.pdf",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.99
+    },
+    {
+      "query": "university courses gpa transcript dean list",
+      "category": "Documents",
+      "expected_target": "CORPUS_022",
+      "top_retrieved_filename": "FILE_D22.pdf",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.12
+    },
+    {
+      "query": "rental contract monthly security deposit clause",
+      "category": "Documents",
+      "expected_target": "CORPUS_023",
+      "top_retrieved_filename": "FILE_D23.pdf",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.88
+    },
+    {
+      "query": "paxos and raft fault tolerant consensus research",
+      "category": "Documents",
+      "expected_target": "CORPUS_024",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 6,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.87
+    },
+    {
+      "query": "bacse grades report official university transcript",
+      "category": "Documents",
+      "expected_target": "CORPUS_022",
+      "top_retrieved_filename": "FILE_D22.pdf",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.74
+    },
+    {
+      "query": "docker terminal crash error log screenshot",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_025",
+      "top_retrieved_filename": "FILE_S25.png",
+      "rank": 1,
+      "final_score": 0.3364,
+      "components": {
+        "lexical_bm25": 0.04,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.28
+    },
+    {
+      "query": "mobile banking wire transfer app wireframe",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_026",
+      "top_retrieved_filename": "FILE_S26.png",
+      "rank": 1,
+      "final_score": 0.3364,
+      "components": {
+        "lexical_bm25": 0.04,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.88
+    },
+    {
+      "query": "bash terminal fatal oomkilled code 137",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_025",
+      "top_retrieved_filename": "FILE_S25.png",
+      "rank": 1,
+      "final_score": 0.3431,
+      "components": {
+        "lexical_bm25": 0.047,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.89
+    },
+    {
+      "query": "fintech dashboard send money account balance ui",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_026",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": 5,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 30.61
+    },
+    {
+      "query": "console screenshot showing memory limit exceeded",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_025",
+      "top_retrieved_filename": "FILE_S25.png",
+      "rank": 1,
+      "final_score": 0.3373,
+      "components": {
+        "lexical_bm25": 0.049,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 9.38
+    },
+    {
+      "query": "app screen mockup with transfer funds button",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_026",
+      "top_retrieved_filename": "FILE_S26.png",
+      "rank": 1,
+      "final_score": 0.3431,
+      "components": {
+        "lexical_bm25": 0.046,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.56
+    },
+    {
+      "query": "docker container exit code screenshot",
+      "category": "Screenshots",
+      "expected_target": "CORPUS_025",
+      "top_retrieved_filename": "FILE_S25.png",
+      "rank": 1,
+      "final_score": 0.3378,
+      "components": {
+        "lexical_bm25": 0.055,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.68
+    },
+    {
+      "query": "whole foods organic grocery market receipt",
+      "category": "Receipts",
+      "expected_target": "CORPUS_027",
+      "top_retrieved_filename": "FILE_R27.jpg",
+      "rank": 1,
+      "final_score": 0.3367,
+      "components": {
+        "lexical_bm25": 0.043,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.7
+    },
+    {
+      "query": "trattoria roma restaurant dinner bill receipt",
+      "category": "Receipts",
+      "expected_target": "CORPUS_028",
+      "top_retrieved_filename": "FILE_R28.jpg",
+      "rank": 1,
+      "final_score": 0.3365,
+      "components": {
+        "lexical_bm25": 0.041,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.86
+    },
+    {
+      "query": "supermarket register slip showing almond milk and total",
+      "category": "Receipts",
+      "expected_target": "CORPUS_027",
+      "top_retrieved_filename": "FILE_R27.jpg",
+      "rank": 1,
+      "final_score": 0.3422,
+      "components": {
+        "lexical_bm25": 0.043,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.4
+    },
+    {
+      "query": "italian cafe check showing pizza and chianti wine",
+      "category": "Receipts",
+      "expected_target": "CORPUS_028",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.07
+    },
+    {
+      "query": "thermal printed paper receipt with avocado itemized",
+      "category": "Receipts",
+      "expected_target": "CORPUS_027",
+      "top_retrieved_filename": "FILE_A03.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.95
+    },
+    {
+      "query": "restaurant customer bill with subtotal and tax tip",
+      "category": "Receipts",
+      "expected_target": "CORPUS_028",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.77
+    },
+    {
+      "query": "store receipt totaling 47 dollars",
+      "category": "Receipts",
+      "expected_target": "CORPUS_027",
+      "top_retrieved_filename": "FILE_R27.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.9
+    },
+    {
+      "query": "certified kubernetes administrator certificate",
+      "category": "Certificates",
+      "expected_target": "CORPUS_029",
+      "top_retrieved_filename": "FILE_K29.jpg",
+      "rank": 1,
+      "final_score": 0.3383,
+      "components": {
+        "lexical_bm25": 0.059,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.78
+    },
+    {
+      "query": "emergency first aid and cpr certification",
+      "category": "Certificates",
+      "expected_target": "CORPUS_030",
+      "top_retrieved_filename": "FILE_K30.jpg",
+      "rank": 1,
+      "final_score": 0.3441,
+      "components": {
+        "lexical_bm25": 0.051,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.45
+    },
+    {
+      "query": "cloud native cka achievement badge with gold seal",
+      "category": "Certificates",
+      "expected_target": "CORPUS_029",
+      "top_retrieved_filename": "FILE_K29.jpg",
+      "rank": 1,
+      "final_score": 0.3414,
+      "components": {
+        "lexical_bm25": 0.039,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.86
+    },
+    {
+      "query": "american red cross basic life support certificate",
+      "category": "Certificates",
+      "expected_target": "CORPUS_030",
+      "top_retrieved_filename": "FILE_K30.jpg",
+      "rank": 1,
+      "final_score": 0.3368,
+      "components": {
+        "lexical_bm25": 0.044,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.21
+    },
+    {
+      "query": "official linux foundation exam verification certificate",
+      "category": "Certificates",
+      "expected_target": "CORPUS_029",
+      "top_retrieved_filename": "FILE_K29.jpg",
+      "rank": 1,
+      "final_score": 0.3371,
+      "components": {
+        "lexical_bm25": 0.047,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.54
+    },
+    {
+      "query": "aed defibrillator medical training credential",
+      "category": "Certificates",
+      "expected_target": "CORPUS_030",
+      "top_retrieved_filename": "FILE_K30.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.79
+    },
+    {
+      "query": "gold seal credential for passing cka exam",
+      "category": "Certificates",
+      "expected_target": "CORPUS_029",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": 5,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.99
+    },
+    {
+      "query": "oauth 2 authorization flow sequence diagram",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_031",
+      "top_retrieved_filename": "FILE_X31.png",
+      "rank": 1,
+      "final_score": 0.3363,
+      "components": {
+        "lexical_bm25": 0.039,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.76
+    },
+    {
+      "query": "ecommerce relational database schema erd diagram",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_032",
+      "top_retrieved_filename": "FILE_X31.png",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.77
+    },
+    {
+      "query": "auth code grant sequence flow arrows diagram",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_031",
+      "top_retrieved_filename": "FILE_X31.png",
+      "rank": 1,
+      "final_score": 0.3358,
+      "components": {
+        "lexical_bm25": 0.034,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.85
+    },
+    {
+      "query": "entity relationship diagram with users and orders tables",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_032",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.53
+    },
+    {
+      "query": "uml protocol sequence showing access token exchange",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_031",
+      "top_retrieved_filename": "FILE_D24.pdf",
+      "rank": 6,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.99
+    },
+    {
+      "query": "sql database foreign key schema visualization",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_032",
+      "top_retrieved_filename": "FILE_P20.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.2
+    },
+    {
+      "query": "system architecture sequence diagram for oauth",
+      "category": "Diagrams",
+      "expected_target": "CORPUS_031",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.3
+    },
+    {
+      "query": "can you find that paper discussing raft consensus",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_024",
+      "top_retrieved_filename": "FILE_D24.pdf",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.28
+    },
+    {
+      "query": "please show me the receipt from whole foods",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_027",
+      "top_retrieved_filename": "FILE_R27.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 4.84
+    },
+    {
+      "query": "where is my college timetable for fall semester",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_033",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 8,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.6
+    },
+    {
+      "query": "give me the photo of that golden retriever playing outside",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_001",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.2
+    },
+    {
+      "query": "i need the lease agreement for my apartment",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_023",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 3,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.91
+    },
+    {
+      "query": "look for the kubernetes administrator certificate for me",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_029",
+      "top_retrieved_filename": "FILE_K29.jpg",
+      "rank": 1,
+      "final_score": 0.3402,
+      "components": {
+        "lexical_bm25": 0.079,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.44
+    },
+    {
+      "query": "search for the photo of surgeon in hospital operating room",
+      "category": "Natural Language",
+      "expected_target": "CORPUS_010",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.11
+    },
+    {
+      "query": "optical magnification device for microscopic biology",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_007",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 5,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.28
+    },
+    {
+      "query": "zero emission battery propelled passenger vehicle",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_004",
+      "top_retrieved_filename": "FILE_P20.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.57
+    },
+    {
+      "query": "canine companion enjoying outdoor leisure on grass",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_001",
+      "top_retrieved_filename": "FILE_A01.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.77
+    },
+    {
+      "query": "high velocity passenger bullet train on tracks",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_005",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.45
+    },
+    {
+      "query": "crimson silk formal attire for women",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_014",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": 3,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.87
+    },
+    {
+      "query": "thermal register receipt documenting supermarket grocery purchase",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_027",
+      "top_retrieved_filename": "FILE_P21.jpg",
+      "rank": 2,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.94
+    },
+    {
+      "query": "aerospace alpine forest landscape enveloped in mist",
+      "category": "Paraphrases",
+      "expected_target": "CORPUS_016",
+      "top_retrieved_filename": "FILE_A02.jpg",
+      "rank": -1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.63
+    },
+    {
+      "query": "jaguar in jungle",
+      "category": "Ambiguous",
+      "expected_target": "CORPUS_035",
+      "top_retrieved_filename": "FILE_T35.jpg",
+      "rank": 1,
+      "final_score": 0.3563,
+      "components": {
+        "lexical_bm25": 0.105,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.11
+    },
+    {
+      "query": "weekly schedule routine",
+      "category": "Ambiguous",
+      "expected_target": "CORPUS_033",
+      "top_retrieved_filename": "FILE_T33.jpg",
+      "rank": 1,
+      "final_score": 0.3418,
+      "components": {
+        "lexical_bm25": 0.096,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 4.74
+    },
+    {
+      "query": "student campus identity",
+      "category": "Ambiguous",
+      "expected_target": "CORPUS_034",
+      "top_retrieved_filename": "FILE_T34.jpg",
+      "rank": 1,
+      "final_score": 0.3489,
+      "components": {
+        "lexical_bm25": 0.072,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.01
+    },
+    {
+      "query": "black panther wild predator",
+      "category": "Ambiguous",
+      "expected_target": "CORPUS_035",
+      "top_retrieved_filename": "FILE_T35.jpg",
+      "rank": 1,
+      "final_score": 0.3461,
+      "components": {
+        "lexical_bm25": 0.06,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.09
+    },
+    {
+      "query": "fall classes timetable grid",
+      "category": "Ambiguous",
+      "expected_target": "CORPUS_033",
+      "top_retrieved_filename": "FILE_T33.jpg",
+      "rank": 1,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 8.21
+    },
+    {
+      "query": "plastic barcode identity badge",
+      "category": "Ambiguous",
+      "expected_target": "CORPUS_034",
+      "top_retrieved_filename": "FILE_T34.jpg",
+      "rank": 1,
+      "final_score": 0.3465,
+      "components": {
+        "lexical_bm25": 0.061,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.99
+    },
+    {
+      "query": "deep sea submarine submarine blueprint design",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "FILE_D22.pdf",
+      "rank": 0,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.93
+    },
+    {
+      "query": "medieval knight steel plate armor suit",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": 0,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.2
+    },
+    {
+      "query": "space shuttle launch pad rocket blastoff",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "FILE_P20.jpg",
+      "rank": 0,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.7
+    },
+    {
+      "query": "egyptian pyramid stone tomb hieroglyphs",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "N/A",
+      "rank": 0,
+      "final_score": 0.0,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.0,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 5.88
+    },
+    {
+      "query": "underwater scuba diver coral reef shark",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "N/A",
+      "rank": 0,
+      "final_score": 0.0,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.0,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.6
+    },
+    {
+      "query": "antique grandfather clock pendulum wooden cabinet",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "FILE_O07.jpg",
+      "rank": 0,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.56
+    },
+    {
+      "query": "steampunk airship zeppelin in cloudy skies",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "FILE_C13.jpg",
+      "rank": 0,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 6.37
+    },
+    {
+      "query": "formula 1 racing car pit stop tire change",
+      "category": "Negative/Distractors",
+      "expected_target": "NONE (Negative/Distractor)",
+      "top_retrieved_filename": "FILE_C14.jpg",
+      "rank": 0,
+      "final_score": 0.3325,
+      "components": {
+        "lexical_bm25": 0.0,
+        "semantic": 0.0,
+        "clip": 0.0,
+        "vlm": 0.95,
+        "filename": 0.0
+      },
+      "qwen_vlm_invoked_query_time": false,
+      "latency_ms": 7.46
+    }
+  ]
+}

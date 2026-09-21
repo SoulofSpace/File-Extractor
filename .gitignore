@@ -1,0 +1,38 @@
+# Virtual Environment
+.venv/
+env/
+venv/
+ENV/
+
+# Python cache & compiled bytecode
+__pycache__/
+*.py[cod]
+*$py.class
+*.pyd
+
+# Local Database & Test Data
+*.sqlite
+*.sqlite3
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+runtime-test-data/
+runtime-test-fixtures/
+
+# Logs & Temporary Files
+*.log
+*.tmp
+.cache/
+
+# Large Model Weights (Downloaded via huggingface / local GGUF)
+models/*.gguf
+models/*.bin
+models/*.pt
+models/*.safetensors
+models/*.onnx
+
+# OS generated files
+.DS_Store
+Thumbs.db
+desktop.ini

@@ -1,0 +1,672 @@
+{
+  "metadata": {
+    "version": "v2.0.0-verified",
+    "generated_at": "2026-09-19T16:03:51Z",
+    "cpu": "AMD Ryzen 7 7840HS w/ Radeon 780M Graphics (8 cores, 16 threads)",
+    "gpu": "NVIDIA GeForce RTX 4060 Laptop GPU",
+    "ram": "16.0 GB DDR5",
+    "os": "Windows 11 Home (x86_64, build 10.0.26100)",
+    "python_version": "3.12.9",
+    "query_set_hash": "SHA256:f4b70fd7d73b3f01",
+    "relevance_set_hash": "SHA256:b4fb6ab16669f9b1"
+  },
+  "summary_metrics": {
+    "hit_1": 1.0,
+    "hit_3": 1.0,
+    "hit_5": 1.0,
+    "hit_10": 1.0,
+    "precision_5": 0.20000000000000004,
+    "precision_10": 0.10000000000000002,
+    "recall_10": 1.0,
+    "mrr": 1.0,
+    "ndcg_10": 1.0,
+    "p50_latency_ms": 17.170500001157052,
+    "p95_latency_ms": 50.56511999937356,
+    "p99_latency_ms": 60.82806400023398,
+    "cold_start_latency_ms": 33.063400000173715,
+    "model_init_time_ms": 248.17029999940132
+  },
+  "per_query_results": [
+    {
+      "query_id": "Q01",
+      "query": "i need my DBMS DA 3",
+      "modality": "academic",
+      "target_files": [
+        "DBMS_DA_3_Database_Assignment.pdf"
+      ],
+      "retrieved_top10": [
+        "dbms_da_3_database_assignment.pdf",
+        "dsa_tree_traversal_algorithms.pdf",
+        "machine_learning_model_evaluation_metrics.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 30.750600000828854
+    },
+    {
+      "query_id": "Q02",
+      "query": "Operating Systems Lab 2",
+      "modality": "academic",
+      "target_files": [
+        "Operating_Systems_Lab_2_Process_Scheduling.pdf"
+      ],
+      "retrieved_top10": [
+        "operating_systems_lab_2_process_scheduling.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 26.857100001507206
+    },
+    {
+      "query_id": "Q03",
+      "query": "Computer Networks assignment",
+      "modality": "academic",
+      "target_files": [
+        "Computer_Networks_CN_Assignment.pdf"
+      ],
+      "retrieved_top10": [
+        "computer_networks_cn_assignment.pdf",
+        "operating_systems_lab_2_process_scheduling.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 18.40289999927336
+    },
+    {
+      "query_id": "Q04",
+      "query": "crimson crawlers",
+      "modality": "visual",
+      "target_files": [
+        "crimson_crawlers_red_spider_logo.png"
+      ],
+      "retrieved_top10": [
+        "crimson_crawlers_red_spider_logo.png",
+        "startup_flow_diagram_guide.png",
+        "store_receipt_tax_expense_bill.png",
+        "sunset_beach_mountain_landscape.jpg",
+        "two_persons_selfie_red_dress.jpg",
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 45.049700000163284
+    },
+    {
+      "query_id": "Q05",
+      "query": "red spider logo",
+      "modality": "visual",
+      "target_files": [
+        "crimson_crawlers_red_spider_logo.png"
+      ],
+      "retrieved_top10": [
+        "crimson_crawlers_red_spider_logo.png",
+        "two_persons_selfie_red_dress.jpg",
+        "startup_flow_diagram_guide.png",
+        "store_receipt_tax_expense_bill.png",
+        "sunset_beach_mountain_landscape.jpg",
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 47.6490000000922
+    },
+    {
+      "query_id": "Q06",
+      "query": "flow diagram for how to start a startup sort of stuff",
+      "modality": "visual",
+      "target_files": [
+        "startup_flow_diagram_guide.png"
+      ],
+      "retrieved_top10": [
+        "startup_flow_diagram_guide.png",
+        "crimson_crawlers_red_spider_logo.png",
+        "store_receipt_tax_expense_bill.png",
+        "sunset_beach_mountain_landscape.jpg",
+        "two_persons_selfie_red_dress.jpg",
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 48.49040000044624
+    },
+    {
+      "query_id": "Q07",
+      "query": "2 persons taking selfie with both in red dress",
+      "modality": "visual",
+      "target_files": [
+        "two_persons_selfie_red_dress.jpg"
+      ],
+      "retrieved_top10": [
+        "two_persons_selfie_red_dress.jpg",
+        "crimson_crawlers_red_spider_logo.png",
+        "startup_flow_diagram_guide.png",
+        "store_receipt_tax_expense_bill.png",
+        "sunset_beach_mountain_landscape.jpg",
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 63.90520000059041
+    },
+    {
+      "query_id": "Q08",
+      "query": "quarterly financial invoice",
+      "modality": "lexical",
+      "target_files": [
+        "quarterly_financial_invoice_q1.xlsx"
+      ],
+      "retrieved_top10": [
+        "quarterly_financial_invoice_q1.xlsx"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 16.56410000032338
+    },
+    {
+      "query_id": "Q09",
+      "query": "python script async search worker",
+      "modality": "semantic",
+      "target_files": [
+        "python_async_search_worker.py"
+      ],
+      "retrieved_top10": [
+        "python_async_search_worker.py"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 15.999699999156292
+    },
+    {
+      "query_id": "Q10",
+      "query": "docker compose postgres database setup",
+      "modality": "semantic",
+      "target_files": [
+        "docker_compose_postgres_setup.yaml"
+      ],
+      "retrieved_top10": [
+        "docker_compose_postgres_setup.yaml"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 15.28390000021318
+    },
+    {
+      "query_id": "Q11",
+      "query": "meeting notes sprint planning review",
+      "modality": "lexical",
+      "target_files": [
+        "meeting_notes_sprint_planning.docx"
+      ],
+      "retrieved_top10": [
+        "meeting_notes_sprint_planning.docx"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 14.23849999991944
+    },
+    {
+      "query_id": "Q12",
+      "query": "machine learning model evaluation metrics",
+      "modality": "semantic",
+      "target_files": [
+        "machine_learning_model_evaluation_metrics.pdf"
+      ],
+      "retrieved_top10": [
+        "machine_learning_model_evaluation_metrics.pdf",
+        "deep_neural_network_gradient_loss.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 16.89520000036282
+    },
+    {
+      "query_id": "Q13",
+      "query": "resume curriculum vitae software engineer",
+      "modality": "lexical",
+      "target_files": [
+        "software_engineer_curriculum_vitae_resume.pdf"
+      ],
+      "retrieved_top10": [
+        "software_engineer_curriculum_vitae_resume.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 17.170500001157052
+    },
+    {
+      "query_id": "Q14",
+      "query": "contract agreement non disclosure nda",
+      "modality": "lexical",
+      "target_files": [
+        "confidentiality_nda_contract_agreement.pdf"
+      ],
+      "retrieved_top10": [
+        "confidentiality_nda_contract_agreement.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 14.27510000030452
+    },
+    {
+      "query_id": "Q15",
+      "query": "sunset landscape beach mountain",
+      "modality": "visual",
+      "target_files": [
+        "sunset_beach_mountain_landscape.jpg"
+      ],
+      "retrieved_top10": [
+        "sunset_beach_mountain_landscape.jpg",
+        "crimson_crawlers_red_spider_logo.png",
+        "startup_flow_diagram_guide.png",
+        "store_receipt_tax_expense_bill.png",
+        "two_persons_selfie_red_dress.jpg",
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 47.13910000100441
+    },
+    {
+      "query_id": "Q16",
+      "query": "SQL database table schema migration",
+      "modality": "semantic",
+      "target_files": [
+        "sql_database_table_schema_migration.sql"
+      ],
+      "retrieved_top10": [
+        "sql_database_table_schema_migration.sql"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 18.79679999910877
+    },
+    {
+      "query_id": "Q17",
+      "query": "data structures and algorithms tree traversal",
+      "modality": "academic",
+      "target_files": [
+        "dsa_tree_traversal_algorithms.pdf"
+      ],
+      "retrieved_top10": [
+        "dsa_tree_traversal_algorithms.pdf",
+        "dbms_da_3_database_assignment.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 17.221000000063214
+    },
+    {
+      "query_id": "Q18",
+      "query": "movie video 1080p high definition",
+      "modality": "hybrid",
+      "target_files": [
+        "action_movie_video_1080p_bluray.mp4"
+      ],
+      "retrieved_top10": [
+        "action_movie_video_1080p_bluray.mp4"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 15.628299999661976
+    },
+    {
+      "query_id": "Q19",
+      "query": "podcast interview audio recording",
+      "modality": "hybrid",
+      "target_files": [
+        "podcast_interview_recording_audio.mp3"
+      ],
+      "retrieved_top10": [
+        "podcast_interview_recording_audio.mp3"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 13.844500001141569
+    },
+    {
+      "query_id": "Q20",
+      "query": "archive backup zip file",
+      "modality": "hybrid",
+      "target_files": [
+        "project_backup_archive_2026.zip"
+      ],
+      "retrieved_top10": [
+        "project_backup_archive_2026.zip"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 14.82190000024275
+    },
+    {
+      "query_id": "Q21",
+      "query": "receipt tax deduction expense",
+      "modality": "lexical",
+      "target_files": [
+        "store_receipt_tax_expense_bill.png"
+      ],
+      "retrieved_top10": [
+        "store_receipt_tax_expense_bill.png",
+        "crimson_crawlers_red_spider_logo.png",
+        "startup_flow_diagram_guide.png",
+        "sunset_beach_mountain_landscape.jpg",
+        "two_persons_selfie_red_dress.jpg",
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 45.54420000022219
+    },
+    {
+      "query_id": "Q22",
+      "query": "user interface design mockup wireframe",
+      "modality": "visual",
+      "target_files": [
+        "user_interface_design_wireframe_mockup.png"
+      ],
+      "retrieved_top10": [
+        "user_interface_design_wireframe_mockup.png",
+        "crimson_crawlers_red_spider_logo.png",
+        "startup_flow_diagram_guide.png",
+        "store_receipt_tax_expense_bill.png",
+        "sunset_beach_mountain_landscape.jpg",
+        "two_persons_selfie_red_dress.jpg"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 51.083799999105395
+    },
+    {
+      "query_id": "Q23",
+      "query": "jwt authentication bearer token",
+      "modality": "semantic",
+      "target_files": [
+        "jwt_bearer_token_authentication.py"
+      ],
+      "retrieved_top10": [
+        "jwt_bearer_token_authentication.py"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 12.75060000079975
+    },
+    {
+      "query_id": "Q24",
+      "query": "react typescript frontend component",
+      "modality": "semantic",
+      "target_files": [
+        "react_typescript_frontend_component.tsx"
+      ],
+      "retrieved_top10": [
+        "react_typescript_frontend_component.tsx"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 13.012800000069547
+    },
+    {
+      "query_id": "Q25",
+      "query": "deep neural network loss function gradient",
+      "modality": "academic",
+      "target_files": [
+        "deep_neural_network_gradient_loss.pdf"
+      ],
+      "retrieved_top10": [
+        "deep_neural_network_gradient_loss.pdf",
+        "machine_learning_model_evaluation_metrics.pdf"
+      ],
+      "first_relevant_rank": 1,
+      "hit_1": 1.0,
+      "hit_3": 1.0,
+      "hit_5": 1.0,
+      "hit_10": 1.0,
+      "precision_5": 0.2,
+      "precision_10": 0.1,
+      "recall_10": 1.0,
+      "reciprocal_rank": 1.0,
+      "dcg_10": 1.0,
+      "idcg_10": 1.0,
+      "ndcg_10": 1.0,
+      "latency_ms": 15.164700000241282
+    }
+  ]
+}
