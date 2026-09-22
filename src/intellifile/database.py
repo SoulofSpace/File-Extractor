@@ -836,7 +836,21 @@ class Database:
 
     def search_document_understanding(self, query: str, limit: int = 50) -> List[Dict[str, Any]]:
         """Search document understanding records by concept, object, tag, title, or description."""
-        tokens = [t.strip().lower() for t in re.sub(r"[^\w\s]|_", " ", query).split() if t.strip()]
+        COMMON_STOPWORDS = {
+            "a", "an", "the", "in", "on", "at", "to", "for", "of", "by", "with",
+            "and", "or", "is", "it", "as", "from", "into", "onto", "my", "me",
+            "this", "that", "these", "those",
+        }
+        ALLOWED_SHORT_TOKENS = {
+            "ai", "ml", "ui", "ux", "os", "id", "qa", "db", "vr", "ar", "cv", "ip",
+        }
+
+        raw_tokens = [t.strip().lower() for t in re.sub(r"[^\w\s]|_", " ", query).split() if t.strip()]
+        significant_tokens = [
+            t for t in raw_tokens
+            if (len(t) > 2 and t not in COMMON_STOPWORDS) or (t in ALLOWED_SHORT_TOKENS)
+        ]
+        tokens = significant_tokens if significant_tokens else [t for t in raw_tokens if t not in {"a", "an", "the"}]
         if not tokens:
             return []
 
@@ -864,9 +878,43 @@ class Database:
             ORDER BY match_count DESC, du.id DESC
             LIMIT ?
         """
-        all_params = clause_params + clause_params + [limit]
+        COLOR_WORDS = {
+            "red", "blue", "green", "yellow", "orange", "purple", "pink", "brown", "black", "white", "gray", "grey", "cyan", "magenta"
+        }
+        min_matches = 2 if len(tokens) >= 3 else 1
+
+        all_params = clause_params + clause_params + [limit * 2]
         with self.connection() as conn:
             rows = conn.execute(sql, all_params).fetchall()
-            return [dict(r) for r in rows]
+            scored_rows = []
+            for r in rows:
+                du_dict = dict(r)
+                combined_text = " ".join([
+                    str(du_dict.get("title") or ""),
+                    str(du_dict.get("event_name") or ""),
+                    str(du_dict.get("document_type") or ""),
+                    str(du_dict.get("objects") or ""),
+                    str(du_dict.get("semantic_tags") or ""),
+                    str(du_dict.get("visual_concepts") or ""),
+                    str(du_dict.get("description") or ""),
+                    str(du_dict.get("important_text") or ""),
+                ]).lower()
+                word_set = set(re.findall(r"\b\w+\b", combined_text))
+                matched_tokens = [t for t in tokens if t in word_set]
+                exact_matches = len(matched_tokens)
+
+                # Coordination filter: require >=2 matches for queries with >=3 keywords
+                if exact_matches < min_matches:
+                    continue
+
+                # Color-only filter: multi-token queries cannot match solely on color adjectives
+                if len(tokens) >= 2 and all(t in COLOR_WORDS for t in matched_tokens):
+                    continue
+
+                du_dict["match_count"] = exact_matches
+                scored_rows.append(du_dict)
+
+            scored_rows.sort(key=lambda x: (x["match_count"], x.get("id", 0)), reverse=True)
+            return scored_rows[:limit]
 
 

@@ -183,15 +183,36 @@ class AIAgent:
                     entry["reasons"].append(f"Visual CLIP match ({sim_norm:.2f})")
 
         # ── Branch 1b: Universal Document & Visual Understanding (V3) ──
+        du_file_ids: set = set()
+        if hasattr(self.database, "connection"):
+            try:
+                with self.database.connection() as conn:
+                    du_rows = conn.execute("SELECT DISTINCT file_id FROM document_understanding").fetchall()
+                    du_file_ids = {r[0] for r in du_rows}
+            except Exception:
+                pass
+
         if hasattr(self.database, "search_document_understanding"):
             try:
                 du_hits = self.database.search_document_understanding(plan.cleaned_query, limit=30)
+                raw_q_words = [t for t in re.sub(r"[^\w\s]|_", " ", plan.cleaned_query.lower()).split() if t]
+                q_keywords = [
+                    t for t in raw_q_words
+                    if len(t) > 2 and t not in {"in", "on", "at", "to", "for", "of", "by", "with", "a", "an", "the", "and", "or", "is", "my", "me"}
+                ]
+                total_q_keywords = max(1, len(q_keywords) if q_keywords else len(raw_q_words))
+
                 for du in du_hits:
                     p_str = str(du.get("path", ""))
                     if not p_str:
                         continue
                     entry = get_or_create(p_str, du)
-                    entry["vlm_score"] = max(entry["vlm_score"], 0.95)
+                    match_count = float(du.get("match_count") or 1)
+                    coverage = min(1.0, match_count / total_q_keywords)
+                    # Scale VLM score from 0.40 (single partial match) up to 0.95 (full multi-keyword match)
+                    scaled_vlm = 0.40 + 0.55 * coverage
+                    entry["vlm_score"] = max(entry["vlm_score"], round(scaled_vlm, 3))
+                    entry["vlm_coverage"] = max(entry.get("vlm_coverage", 0.0), coverage)
                     d_type = du.get("document_type", "document")
                     t_name = du.get("title") or du.get("event_name") or ""
                     reason_desc = f"Visual understanding: {d_type}" + (f" '{t_name}'" if t_name else "")
@@ -324,11 +345,17 @@ class AIAgent:
             )
             vlm_s = entry.get("vlm_score", 0.0)
             if vlm_s > 0.0:
-                # If VLM document understanding matched, blend with 35% weight
-                w_vlm = 0.35
+                # If VLM document understanding matched, blend proportionally with coverage up to 35%
+                cov = float(entry.get("vlm_coverage", 1.0))
+                w_vlm = 0.35 * cov
                 score = w_vlm * vlm_s + (1.0 - w_vlm) * base_score
             else:
                 score = base_score
+                # Negative confirmation: if an image was analyzed by VLM and produced zero concept match
+                # for the query, apply a non-match discount to its unconfirmed visual embedding score
+                rec_id = rec.get("id") or rec.get("file_id")
+                if rec_id in du_file_ids and entry["clip_score"] > 0.0:
+                    score = score * 0.85
             score = max(0.0, min(1.0, score))
 
             # Deduplicate reasons

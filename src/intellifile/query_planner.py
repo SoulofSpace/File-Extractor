@@ -61,7 +61,8 @@ STRUCTURAL_DOC_TYPES = {
 
 VISUAL_MODALITY_TERMS = {
     "photo", "picture", "image", "pic", "selfie", "camera", "snapshot", "drawing",
-    "illustration", "artwork", "graphic", "logo", "wallpaper"
+    "illustration", "artwork", "graphic", "logo", "wallpaper",
+    "portrait", "dress", "shirt", "wearing", "clothes", "clothing", "outfit", "tshirt",
 }
 
 
