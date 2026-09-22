@@ -878,11 +878,6 @@ class Database:
             ORDER BY match_count DESC, du.id DESC
             LIMIT ?
         """
-        COLOR_WORDS = {
-            "red", "blue", "green", "yellow", "orange", "purple", "pink", "brown", "black", "white", "gray", "grey", "cyan", "magenta"
-        }
-        min_matches = 2 if len(tokens) >= 3 else 1
-
         all_params = clause_params + clause_params + [limit * 2]
         with self.connection() as conn:
             rows = conn.execute(sql, all_params).fetchall()
@@ -903,16 +898,9 @@ class Database:
                 matched_tokens = [t for t in tokens if t in word_set]
                 exact_matches = len(matched_tokens)
 
-                # Coordination filter: require >=2 matches for queries with >=3 keywords
-                if exact_matches < min_matches:
-                    continue
-
-                # Color-only filter: multi-token queries cannot match solely on color adjectives
-                if len(tokens) >= 2 and all(t in COLOR_WORDS for t in matched_tokens):
-                    continue
-
-                du_dict["match_count"] = exact_matches
-                scored_rows.append(du_dict)
+                if exact_matches > 0:
+                    du_dict["match_count"] = exact_matches
+                    scored_rows.append(du_dict)
 
             scored_rows.sort(key=lambda x: (x["match_count"], x.get("id", 0)), reverse=True)
             return scored_rows[:limit]

@@ -49,6 +49,17 @@ class MatchEvidence:
     visual_score: float = 0.0  # CLIP multimodal cosine similarity
     vlm_score: float = 0.0     # Zero-shot VLM document/visual understanding score
     filename_score: float = 0.0# Exact or substring filename match
+    ocr_score: float = 0.0     # OCR match score
+    metadata_score: float = 0.0# Metadata match score
+    subject_match: float = 0.0 # Compositional subject match
+    attribute_match: float = 0.0 # Compositional attribute/color match
+    clothing_match: float = 0.0# Compositional clothing match
+    object_match: float = 0.0  # Compositional non-clothing object match
+    action_match: float = 0.0  # Compositional action/verb match
+    relationship_match: float = 0.0 # Compositional relationship match
+    scene_match: float = 0.0   # Compositional scene/environment match
+    coordination_score: float = 0.0 # Quadratic query coordination score
+    contradiction_penalty: float = 0.0 # Contradiction penalty
     matched_terms: List[str] = field(default_factory=list)
     snippet: str = ""
     page_number: Optional[int] = None
@@ -57,6 +68,26 @@ class MatchEvidence:
     def formatted_badge(self) -> str:
         """Returns user-facing badge indicating multi-modal retrieval score."""
         return f"Relevance Score: {self.relevance_score:.2f}"
+
+    def debug_dict(self) -> Dict[str, float]:
+        """Exposes the required 15 diagnostic scoring fields."""
+        return {
+            "subject_match": round(self.subject_match, 4),
+            "attribute_match": round(self.attribute_match, 4),
+            "clothing_match": round(self.clothing_match, 4),
+            "object_match": round(self.object_match, 4),
+            "action_match": round(self.action_match, 4),
+            "relationship_match": round(self.relationship_match, 4),
+            "scene_match": round(self.scene_match, 4),
+            "CLIP": round(self.visual_score, 4),
+            "SBERT": round(self.semantic_score, 4),
+            "BM25": round(self.lexical_score, 4),
+            "OCR": round(self.ocr_score, 4),
+            "metadata": round(self.metadata_score, 4),
+            "coordination": round(self.coordination_score, 4),
+            "contradiction": round(self.contradiction_penalty, 4),
+            "final_score": round(self.relevance_score, 4),
+        }
 
 
 class TextEmbeddingProvider(ABC):

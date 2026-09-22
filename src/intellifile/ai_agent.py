@@ -20,83 +20,11 @@ logger = logging.getLogger(__name__)
 
 from .database import Database
 from .domain.interfaces import MatchEvidence, TextEmbeddingProvider, VectorStore
-from .query_planner import QueryPlan, QueryPlanner, ACRONYM_MAP, ASSIGNMENT_REGEX, COMPOUND_PAIRS, CONVERSATIONAL_FILLERS
+from .domain.composition import CandidateEvidence, CompositionalQuery
+from .compositional_evaluator import CompositionalEvaluator
+from .query_planner import QueryPlan, QueryPlanner, ACRONYM_MAP, ASSIGNMENT_REGEX, COMPOUND_PAIRS, CONVERSATIONAL_FILLERS, decompose_compositional_query
 from .reranker import CandidateReranker
 from .vision_search import search_images_with_clip
-
-# Conversational stopwords to strip
-CONVERSATIONAL_FILLERS = [
-    r"^i need (my|the|a)?\s*",
-    r"^can you (find|give|get|show) (me)?\s*",
-    r"^where is (my|the|a)?\s*",
-    r"^give me (my|the|a)?\s*",
-    r"^show (me)?\s*",
-    r"^find (me)?\s*",
-    r"^looking for\s*",
-    r"^search for\s*",
-    r"\s*sort of stuff$",
-    r"\s*and stuff$",
-    r"\s*sort of thing$",
-    r"\s*for me$",
-    r"\s*please$",
-]
-
-# Academic & Technical Acronym expansions
-ACRONYM_MAP: dict[str, list[str]] = {
-    "dbms": ["DBMS", "Database Management Systems", "Database", "SQL"],
-    "os": ["Operating Systems", "OS", "BACSE106"],
-    "cn": ["Computer Networks", "Networking"],
-    "dsa": ["Data Structures", "Algorithms", "DSA"],
-    "ai": ["Artificial Intelligence", "Machine Learning"],
-    "ml": ["Machine Learning", "Model"],
-    "oops": ["Object Oriented Programming", "Java", "C++"],
-    "daa": ["Design and Analysis of Algorithms"],
-    "toc": ["Theory of Computation"],
-    "id": ["ID", "Identity", "Identification", "ID Card"],
-}
-
-ASSIGNMENT_REGEX = re.compile(r"\b(da|la|lab|assignment|assessment)\s*[-_]?\s*(\d+)\b", re.IGNORECASE)
-
-# Standard compound word variations (open/closed/hyphenated)
-COMPOUND_PAIRS: dict[str, str] = {
-    "timetable": "time table",
-    "time table": "timetable",
-    "flowchart": "flow chart",
-    "flow chart": "flowchart",
-    "screenshot": "screen shot",
-    "screen shot": "screenshot",
-    "wireframe": "wire frame",
-    "wire frame": "wireframe",
-}
-
-VISUAL_TRIGGERS = {
-    # Person / Portrait / Clothing
-    "selfie", "person", "persons", "people", "man", "guy", "woman", "girl", "boy",
-    "red dress", "blue dress", "dress", "shirt", "wearing", "wear", "clothes", "clothing",
-    "photo", "picture", "camera", "smile", "beach", "sunset", "portrait",
-    # Visual Documents / Schedules / Identity
-    "timetable", "time table", "schedule", "routine",
-    "id card", "identity card", "student id", "college id", "card",
-    "certificate", "receipt", "invoice", "bill", "ticket",
-    # Diagrams & Graphics
-    "flow diagram", "flowchart", "flow chart", "diagram", "wireframe", "wire frame",
-    "screenshot", "screen shot", "startup",
-    "logo", "spider", "crimson", "crawler", "crawlers", "drawing", "illustration",
-    "artwork", "clipart", "sketch", "graphic", "emblem", "wallpaper", "chart", "graph",
-}
-
-
-@dataclass
-class QueryPlan:
-    raw_query: str
-    cleaned_query: str
-    is_visual: bool = False
-    is_academic: bool = False
-    target_category: Optional[str] = None
-    search_terms: list[str] = field(default_factory=list)
-    explanation: str = ""
-    size_filter: Optional[Tuple[str, int]] = None       # ('gt'/'lt', bytes)
-    ext_filter: Optional[str] = None
 
 
 class AIAgent:
@@ -112,12 +40,14 @@ class AIAgent:
         vector_store: Optional[VectorStore] = None,
         query_planner: Optional[QueryPlanner] = None,
         reranker: Optional[CandidateReranker] = None,
+        compositional_evaluator: Optional[CompositionalEvaluator] = None,
     ):
         self.database = database
         self.embedding_provider = embedding_provider
         self.vector_store = vector_store
         self.query_planner = query_planner or QueryPlanner()
         self.reranker = reranker or CandidateReranker()
+        self.compositional_evaluator = compositional_evaluator or CompositionalEvaluator()
 
     def parse_query(self, query: str) -> QueryPlan:
         """Parse raw query into structured QueryPlan using QueryPlanner."""
@@ -149,6 +79,15 @@ class AIAgent:
                     "clip_score": 0.0,
                     "vlm_score": 0.0,
                     "metadata_score": 0.0,
+                    "subject_match": 0.0,
+                    "attribute_match": 0.0,
+                    "clothing_match": 0.0,
+                    "object_match": 0.0,
+                    "action_match": 0.0,
+                    "relationship_match": 0.0,
+                    "scene_match": 0.0,
+                    "coordination_score": 0.0,
+                    "contradiction_penalty": 0.0,
                     "reasons": [],
                     "snippet": file_dict.get("snippet", ""),
                 }
@@ -183,40 +122,29 @@ class AIAgent:
                     entry["reasons"].append(f"Visual CLIP match ({sim_norm:.2f})")
 
         # ── Branch 1b: Universal Document & Visual Understanding (V3) ──
+        du_records_by_file_id: Dict[int, dict] = {}
         du_file_ids: set = set()
         if hasattr(self.database, "connection"):
             try:
                 with self.database.connection() as conn:
-                    du_rows = conn.execute("SELECT DISTINCT file_id FROM document_understanding").fetchall()
-                    du_file_ids = {r[0] for r in du_rows}
+                    du_rows = conn.execute("SELECT * FROM document_understanding").fetchall()
+                    for r in du_rows:
+                        d = dict(r)
+                        fid = d.get("file_id")
+                        if fid:
+                            du_records_by_file_id[fid] = d
+                            du_file_ids.add(fid)
             except Exception:
                 pass
 
         if hasattr(self.database, "search_document_understanding"):
             try:
-                du_hits = self.database.search_document_understanding(plan.cleaned_query, limit=30)
-                raw_q_words = [t for t in re.sub(r"[^\w\s]|_", " ", plan.cleaned_query.lower()).split() if t]
-                q_keywords = [
-                    t for t in raw_q_words
-                    if len(t) > 2 and t not in {"in", "on", "at", "to", "for", "of", "by", "with", "a", "an", "the", "and", "or", "is", "my", "me"}
-                ]
-                total_q_keywords = max(1, len(q_keywords) if q_keywords else len(raw_q_words))
-
+                du_hits = self.database.search_document_understanding(plan.cleaned_query, limit=50)
                 for du in du_hits:
                     p_str = str(du.get("path", ""))
                     if not p_str:
                         continue
-                    entry = get_or_create(p_str, du)
-                    match_count = float(du.get("match_count") or 1)
-                    coverage = min(1.0, match_count / total_q_keywords)
-                    # Scale VLM score from 0.40 (single partial match) up to 0.95 (full multi-keyword match)
-                    scaled_vlm = 0.40 + 0.55 * coverage
-                    entry["vlm_score"] = max(entry["vlm_score"], round(scaled_vlm, 3))
-                    entry["vlm_coverage"] = max(entry.get("vlm_coverage", 0.0), coverage)
-                    d_type = du.get("document_type", "document")
-                    t_name = du.get("title") or du.get("event_name") or ""
-                    reason_desc = f"Visual understanding: {d_type}" + (f" '{t_name}'" if t_name else "")
-                    entry["reasons"].append(reason_desc)
+                    get_or_create(p_str, du)
             except Exception as du_err:
                 logger.debug("Document understanding search skipped: %s", du_err)
 
@@ -312,12 +240,37 @@ class AIAgent:
             except Exception:
                 pass
 
+        # ── Branch 6: Structured Compositional Role Evaluation ───────
+        cq = plan.compositional_query or decompose_compositional_query(plan.cleaned_query)
+        for p_str, entry in candidates.items():
+            rec = entry["record"]
+            rec_id = rec.get("id") or rec.get("file_id")
+            du_data = du_records_by_file_id.get(rec_id)
+            if du_data:
+                cand_ev = CandidateEvidence.from_du_dict(du_data, path=p_str)
+            else:
+                cand_ev = CandidateEvidence(path=p_str, file_id=rec_id, has_vlm=False)
+
+            c_score = self.compositional_evaluator.evaluate(cq, cand_ev)
+            entry["subject_match"] = c_score.subject_match
+            entry["attribute_match"] = c_score.attribute_match
+            entry["clothing_match"] = c_score.clothing_match
+            entry["object_match"] = c_score.object_match
+            entry["action_match"] = c_score.action_match
+            entry["relationship_match"] = c_score.relationship_match
+            entry["scene_match"] = c_score.scene_match
+            entry["coordination_score"] = c_score.coordination_score
+            entry["contradiction_penalty"] = c_score.contradiction_penalty
+            entry["vlm_score"] = c_score.vlm_score
+            if c_score.vlm_score > 0.15:
+                entry["reasons"].append(f"Visual understanding ({c_score.vlm_score:.2f})")
+
         # ── Linear Score Fusion & Structured Match Evidence ───────────
         # Determine weights based on query intent
-        if plan.is_visual:
-            w_clip, w_bm25, w_sem, w_file = 0.60, 0.15, 0.10, 0.15
-        elif plan.is_academic:
+        if plan.is_academic:
             w_clip, w_bm25, w_sem, w_file = 0.00, 0.35, 0.20, 0.45
+        elif plan.is_visual:
+            w_clip, w_bm25, w_sem, w_file = 0.60, 0.15, 0.10, 0.15
         else:
             w_clip, w_bm25, w_sem, w_file = 0.15, 0.35, 0.25, 0.25
 
@@ -344,18 +297,24 @@ class AIAgent:
                 + w_file * entry["file_score"]
             )
             vlm_s = entry.get("vlm_score", 0.0)
-            if vlm_s > 0.0:
-                # If VLM document understanding matched, blend proportionally with coverage up to 35%
-                cov = float(entry.get("vlm_coverage", 1.0))
-                w_vlm = 0.35 * cov
+            coord = entry.get("coordination_score", 0.0)
+            contra = entry.get("contradiction_penalty", 0.0)
+
+            rec_id = rec.get("id") or rec.get("file_id")
+            if vlm_s > 0.05 and coord >= 0.25:
+                # Structured VLM evidence blending:
+                # Blends proportionally with coordination up to 35%
+                w_vlm = 0.35 * coord
                 score = w_vlm * vlm_s + (1.0 - w_vlm) * base_score
             else:
                 score = base_score
-                # Negative confirmation: if an image was analyzed by VLM and produced zero concept match
-                # for the query, apply a non-match discount to its unconfirmed visual embedding score
-                rec_id = rec.get("id") or rec.get("file_id")
-                if rec_id in du_file_ids and entry["clip_score"] > 0.0:
+                if rec_id in du_file_ids and entry["clip_score"] > 0.0 and plan.is_visual and coord < 0.25:
+                    # Negative confirmation: VLM analyzed image and confirmed no match for visual roles
                     score = score * 0.85
+
+            # Contradiction suppression: if candidate contradicts query requirements
+            if contra > 0.0:
+                score = score * max(0.15, (1.0 - 0.60 * contra))
             score = max(0.0, min(1.0, score))
 
             # Deduplicate reasons
@@ -377,6 +336,17 @@ class AIAgent:
                 visual_score=round(entry["clip_score"], 3),
                 vlm_score=round(vlm_s, 3),
                 filename_score=round(entry["file_score"], 3),
+                ocr_score=round(entry["ocr_score"], 3),
+                metadata_score=round(entry["metadata_score"], 3),
+                subject_match=round(entry.get("subject_match", 0.0), 3),
+                attribute_match=round(entry.get("attribute_match", 0.0), 3),
+                clothing_match=round(entry.get("clothing_match", 0.0), 3),
+                object_match=round(entry.get("object_match", 0.0), 3),
+                action_match=round(entry.get("action_match", 0.0), 3),
+                relationship_match=round(entry.get("relationship_match", 0.0), 3),
+                scene_match=round(entry.get("scene_match", 0.0), 3),
+                coordination_score=round(coord, 3),
+                contradiction_penalty=round(contra, 3),
                 explanation=" · ".join(unique_reasons[:3]) if unique_reasons else "Matching file content",
                 snippet=entry["snippet"],
             )
@@ -386,16 +356,13 @@ class AIAgent:
             rec["ai_badge"] = evidence.formatted_badge()
             rec["ai_explanation"] = evidence.explanation
             rec["snippet"] = evidence.snippet
-            rec["match_evidence"] = {
-                "relevance_score": score,
-                "filename": entry["file_score"],
-                "lexical": entry["bm25_score"],
-                "ocr": entry["ocr_score"],
-                "semantic": entry["sem_score"],
-                "visual": entry["clip_score"],
-                "vlm": vlm_s,
-                "metadata": entry["metadata_score"],
-            }
+            rec["match_evidence"] = evidence.debug_dict()
+            rec["match_evidence"]["filename"] = entry["file_score"]
+            rec["match_evidence"]["lexical"] = entry["bm25_score"]
+            rec["match_evidence"]["ocr"] = entry["ocr_score"]
+            rec["match_evidence"]["semantic"] = entry["sem_score"]
+            rec["match_evidence"]["visual"] = entry["clip_score"]
+            rec["match_evidence"]["vlm"] = vlm_s
             final_results.append(rec)
 
         # Deterministic sorting: primary sort by rank (negative score), secondary tie-breaker by path
@@ -410,16 +377,23 @@ class AIAgent:
             for r in final_results[:10]:
                 fn = r.get("filename", Path(r.get("path", "")).name)
                 me = r.get("match_evidence", {})
-                print(f"\nRESULT:\n{fn}\n")
+                print(f"\nRESULT: {fn}\n")
                 print("Scores:")
-                print(f"  exact_filename = {me.get('filename', 0.0):.2f}")
-                print(f"  BM25           = {me.get('lexical', 0.0):.2f}")
-                print(f"  OCR            = {me.get('ocr', 0.0):.2f}")
-                print(f"  SBERT          = {me.get('semantic', 0.0):.2f}")
-                print(f"  CLIP           = {me.get('visual', 0.0):.2f}")
-                print(f"  VLM            = {me.get('vlm', 0.0):.2f}")
-                print(f"  metadata       = {me.get('metadata', 0.0):.2f}")
-                print(f"  final          = {r.get('relevance_score', 0.0):.2f}")
+                print(f"  subject_match      = {me.get('subject_match', 0.0):.2f}")
+                print(f"  attribute_match    = {me.get('attribute_match', 0.0):.2f}")
+                print(f"  clothing_match     = {me.get('clothing_match', 0.0):.2f}")
+                print(f"  object_match       = {me.get('object_match', 0.0):.2f}")
+                print(f"  action_match       = {me.get('action_match', 0.0):.2f}")
+                print(f"  relationship_match = {me.get('relationship_match', 0.0):.2f}")
+                print(f"  scene_match        = {me.get('scene_match', 0.0):.2f}")
+                print(f"  CLIP               = {me.get('CLIP', 0.0):.2f}")
+                print(f"  SBERT              = {me.get('SBERT', 0.0):.2f}")
+                print(f"  BM25               = {me.get('BM25', 0.0):.2f}")
+                print(f"  OCR                = {me.get('OCR', 0.0):.2f}")
+                print(f"  metadata           = {me.get('metadata', 0.0):.2f}")
+                print(f"  coordination       = {me.get('coordination', 0.0):.2f}")
+                print(f"  contradiction      = {me.get('contradiction', 0.0):.2f}")
+                print(f"  final_score        = {r.get('relevance_score', 0.0):.2f}")
 
         return final_results[:limit]
 

@@ -24,6 +24,7 @@ runtime-test-fixtures/
 *.log
 *.tmp
 .cache/
+scratch/
 
 # Large Model Weights (Downloaded via huggingface / local GGUF)
 models/*.gguf
