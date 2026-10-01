@@ -1,0 +1,1 @@
+llama serve -hf lmstudio-community/Qwen3.5-4B-GGUF:Q4_K_M

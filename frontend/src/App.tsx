@@ -1,0 +1,429 @@
+import React, { useState, useEffect, useCallback } from 'react';
+import { Sidebar, NavItemKey } from './components/layout/Sidebar';
+import { TopBar } from './components/layout/TopBar';
+import { FluidWaterBackground } from './components/background/FluidWaterBackground';
+import { HeroSearch } from './components/home/HeroSearch';
+import { SmartFilterSummary } from './components/search/SmartFilterSummary';
+import { FileGrid } from './components/results/FileGrid';
+import { FileList } from './components/results/FileList';
+import { PreviewDrawer } from './components/preview/PreviewDrawer';
+import { FolderManager } from './components/indexing/FolderManager';
+import { SearchHistoryView } from './components/history/SearchHistoryView';
+import { SavedSearchesView } from './components/history/SavedSearchesView';
+import { SettingsDialog } from './components/settings/SettingsDialog';
+import { apiClient } from './api/client';
+import {
+  SearchResultItem,
+  SystemStatus,
+  FolderItem,
+  SearchHistoryItem,
+  SavedSearchItem,
+  IndexingStatus
+} from './api/types';
+import { Loader2, FileQuestion } from 'lucide-react';
+
+export const App: React.FC = () => {
+  // Navigation State
+  const [activeNav, setActiveNav] = useState<NavItemKey>('home');
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  // Search State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [submittedQuery, setSubmittedQuery] = useState('');
+  const [currentCategory, setCurrentCategory] = useState<string>('ALL');
+  const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
+  const [sortBy, setSortBy] = useState<'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name'>('relevance');
+  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
+
+  // Results & UI State
+  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [totalResults, setTotalResults] = useState(0);
+  const [elapsedMs, setElapsedMs] = useState(0);
+  const [isSearching, setIsSearching] = useState(false);
+  const [isVisualQuery, setIsVisualQuery] = useState(false);
+  const [selectedFile, setSelectedFile] = useState<SearchResultItem | null>(null);
+
+  // Data & Background System States
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [history, setHistory] = useState<SearchHistoryItem[]>([]);
+  const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
+  const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>({
+    is_scanning: false,
+    current_folder: '',
+    current_file: '',
+    current_count: 0,
+    total_count: 0,
+    failures: 0,
+  });
+
+  // Settings
+  const [animationEnabled, setAnimationEnabled] = useState(true);
+
+  // Load Initial Data
+  const refreshSystemData = useCallback(async () => {
+    try {
+      const [status, folderList, hist, saved] = await Promise.all([
+        apiClient.getStatus(),
+        apiClient.getFolders(),
+        apiClient.getSearchHistory(40),
+        apiClient.getSavedSearches(),
+      ]);
+      setSystemStatus(status);
+      setFolders(folderList);
+      setHistory(hist);
+      setSavedSearches(saved);
+      if (status.indexing) {
+        setIndexingStatus(status.indexing);
+      }
+    } catch (err) {
+      console.error('Failed to load system data from backend:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshSystemData();
+    // Poll indexing status every 3 seconds
+    const interval = setInterval(async () => {
+      try {
+        const idx = await apiClient.getIndexingStatus();
+        setIndexingStatus(idx);
+      } catch {}
+    }, 3000);
+    return () => clearInterval(interval);
+  }, [refreshSystemData]);
+
+  // Execute Search
+  const handleExecuteSearch = useCallback(
+    async (
+      queryToSearch: string,
+      category = currentCategory,
+      formats = selectedFormats,
+      sort = sortBy
+    ) => {
+      const q = queryToSearch.trim();
+      if (!q) return;
+
+      setIsSearching(true);
+      setSubmittedQuery(q);
+      setActiveNav('all');
+
+      try {
+        const response = await apiClient.search({
+          query: q,
+          category,
+          formats,
+          sort_by: sort,
+          limit: 60,
+          save_history: true,
+        });
+
+        setResults(response.results || []);
+        setTotalResults(response.total_results || 0);
+        setElapsedMs(response.elapsed_ms || 0);
+        setIsVisualQuery(Boolean(response.query_plan?.is_visual));
+
+        // Preserve selected file if present in new results
+        if (selectedFile) {
+          const match = response.results.find((r) => r.file_id === selectedFile.file_id);
+          setSelectedFile(match || null);
+        }
+      } catch (err) {
+        console.error('Search request failed:', err);
+        setResults([]);
+        setTotalResults(0);
+      } finally {
+        setIsSearching(false);
+      }
+    },
+    [currentCategory, selectedFormats, sortBy, selectedFile]
+  );
+
+  // Category change handler
+  const handleCategorySelect = (catId: string) => {
+    setCurrentCategory(catId);
+    if (submittedQuery) {
+      handleExecuteSearch(submittedQuery, catId, selectedFormats, sortBy);
+    }
+  };
+
+  // Format toggle handler
+  const handleToggleFormat = (ext: string) => {
+    const nextFormats = selectedFormats.includes(ext)
+      ? selectedFormats.filter((f) => f !== ext)
+      : [...selectedFormats, ext];
+    setSelectedFormats(nextFormats);
+    if (submittedQuery) {
+      handleExecuteSearch(submittedQuery, currentCategory, nextFormats, sortBy);
+    }
+  };
+
+  const handleSelectAllFormats = (exts: string[]) => {
+    const combined = Array.from(new Set([...selectedFormats, ...exts]));
+    setSelectedFormats(combined);
+    if (submittedQuery) {
+      handleExecuteSearch(submittedQuery, currentCategory, combined, sortBy);
+    }
+  };
+
+  const handleClearCategoryFormats = (exts: string[]) => {
+    const filtered = selectedFormats.filter((f) => !exts.includes(f));
+    setSelectedFormats(filtered);
+    if (submittedQuery) {
+      handleExecuteSearch(submittedQuery, currentCategory, filtered, sortBy);
+    }
+  };
+
+  const handleClearAllFilters = () => {
+    setCurrentCategory('ALL');
+    setSelectedFormats([]);
+    if (submittedQuery) {
+      handleExecuteSearch(submittedQuery, 'ALL', [], sortBy);
+    }
+  };
+
+  const handleSortChange = (
+    newSort: 'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name'
+  ) => {
+    setSortBy(newSort);
+    if (submittedQuery) {
+      handleExecuteSearch(submittedQuery, currentCategory, selectedFormats, newSort);
+    }
+  };
+
+  // Open File
+  const handleOpenFile = async (path: string, reveal = false) => {
+    try {
+      await apiClient.openFile(path, reveal);
+    } catch (err) {
+      console.error('Failed to open file:', err);
+    }
+  };
+
+  // Sidebar navigation selection
+  const handleSelectNav = (key: NavItemKey) => {
+    setActiveNav(key);
+    setSelectedFile(null);
+
+    // If selecting a category from the sidebar (Images, Documents, Videos, etc.)
+    const categoryMapping: Partial<Record<NavItemKey, string>> = {
+      images: 'IMAGE',
+      documents: 'DOCUMENT',
+      videos: 'VIDEO',
+      audio: 'AUDIO',
+      code: 'CODE',
+      archives: 'ARCHIVE',
+      all: 'ALL',
+    };
+
+    if (categoryMapping[key]) {
+      const cat = categoryMapping[key]!;
+      setCurrentCategory(cat);
+      if (submittedQuery) {
+        handleExecuteSearch(submittedQuery, cat, selectedFormats, sortBy);
+      } else {
+        // Run broad category browse
+        handleExecuteSearch('*', cat, [], sortBy);
+      }
+    }
+  };
+
+  // Folder Actions
+  const handleAddFolder = async (path: string) => {
+    await apiClient.addFolder(path);
+    refreshSystemData();
+  };
+
+  const handleRemoveFolder = async (path: string) => {
+    await apiClient.removeFolder(path);
+    refreshSystemData();
+  };
+
+  const handleRescanFolder = async (path: string) => {
+    await apiClient.triggerRescan(path);
+    refreshSystemData();
+  };
+
+  // History & Saved Searches Actions
+  const handleClearHistory = async () => {
+    await apiClient.clearSearchHistory();
+    setHistory([]);
+  };
+
+  const handleDeleteSavedSearch = async (id: number) => {
+    await apiClient.deleteSavedSearch(id);
+    setSavedSearches((prev) => prev.filter((s) => s.id !== id));
+  };
+
+  // Check if we are on Home page
+  const isHomePage = activeNav === 'home' && !submittedQuery;
+
+  return (
+    <div className="relative flex h-screen w-screen overflow-hidden bg-[#0a0b0e] text-[#f4f4f5]">
+      {/* 1. Fluid Water Wave Canvas Background (Home Screen) */}
+      {animationEnabled && <FluidWaterBackground interactive={isHomePage} />}
+
+      {/* 2. Main Desktop Sidebar */}
+      <Sidebar
+        activeNav={activeNav}
+        onSelectNav={handleSelectNav}
+        isCollapsed={isSidebarCollapsed}
+        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
+        totalIndexedFiles={systemStatus?.total_files || 0}
+      />
+
+      {/* 3. Center Workspace Area */}
+      <div className="relative flex-1 flex flex-col h-full min-w-0 z-10 overflow-hidden">
+        {/* Top Bar Header */}
+        <TopBar
+          showCompactSearch={!isHomePage}
+          query={searchQuery}
+          onQueryChange={setSearchQuery}
+          onSearch={(q) => handleExecuteSearch(q)}
+          isLoading={isSearching}
+          activeFilterCount={(currentCategory !== 'ALL' ? 1 : 0) + selectedFormats.length}
+          totalFiles={systemStatus?.total_files || 0}
+          isScanning={indexingStatus.is_scanning}
+        />
+
+        {/* Dynamic Center Content View */}
+        <main className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+          {/* HOME SCREEN LANDING */}
+          {isHomePage && (
+            <HeroSearch
+              query={searchQuery}
+              onQueryChange={setSearchQuery}
+              onSearch={(q) => handleExecuteSearch(q)}
+              isLoading={isSearching}
+              onQuickCategory={(cat) => {
+                setCurrentCategory(cat);
+                handleExecuteSearch('photo', cat);
+              }}
+              onQuickRecentSearches={() => setActiveNav('recent_searches')}
+            />
+          )}
+
+          {/* SEARCH RESULTS VIEW */}
+          {(activeNav === 'all' ||
+            ['images', 'documents', 'videos', 'audio', 'code', 'archives'].includes(activeNav)) &&
+            submittedQuery && (
+              <div className="space-y-4 max-w-6xl mx-auto">
+                {/* Smart Filter Summary */}
+                <SmartFilterSummary
+                  query={submittedQuery}
+                  totalResults={totalResults}
+                  elapsedMs={elapsedMs}
+                  currentCategory={currentCategory}
+                  onSelectCategory={handleCategorySelect}
+                  selectedFormats={selectedFormats}
+                  onToggleFormat={handleToggleFormat}
+                  onSelectAllFormats={handleSelectAllFormats}
+                  onClearCategoryFormats={handleClearCategoryFormats}
+                  onClearAllFilters={handleClearAllFilters}
+                  sortBy={sortBy}
+                  onSortChange={handleSortChange}
+                  viewMode={viewMode}
+                  onViewModeChange={setViewMode}
+                  isVisualQuery={isVisualQuery}
+                />
+
+                {/* Results Section */}
+                {isSearching ? (
+                  <div className="flex flex-col items-center justify-center p-24 text-center space-y-3">
+                    <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
+                    <span className="text-sm font-medium text-zinc-300">Searching your files with local AI...</span>
+                  </div>
+                ) : results.length > 0 ? (
+                  viewMode === 'grid' ? (
+                    <FileGrid
+                      files={results}
+                      selectedFile={selectedFile}
+                      onSelectFile={setSelectedFile}
+                      onOpenFile={(p) => handleOpenFile(p)}
+                    />
+                  ) : (
+                    <FileList
+                      files={results}
+                      selectedFile={selectedFile}
+                      onSelectFile={setSelectedFile}
+                      onOpenFile={(p) => handleOpenFile(p)}
+                    />
+                  )
+                ) : (
+                  <div className="flex flex-col items-center justify-center p-20 text-center space-y-3 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
+                    <FileQuestion className="w-10 h-10 text-zinc-500" />
+                    <h3 className="text-base font-semibold text-white">No files matched those filters</h3>
+                    <p className="text-xs text-zinc-400 max-w-sm">
+                      Try broadening your search query or clearing active format extensions.
+                    </p>
+                    <button
+                      type="button"
+                      onClick={handleClearAllFilters}
+                      className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors mt-2"
+                    >
+                      Clear all filters
+                    </button>
+                  </div>
+                )}
+              </div>
+            )}
+
+          {/* FOLDERS / INDEXING VIEW */}
+          {activeNav === 'indexing' && (
+            <FolderManager
+              folders={folders}
+              indexingStatus={indexingStatus}
+              onAddFolder={handleAddFolder}
+              onRemoveFolder={handleRemoveFolder}
+              onRescanFolder={handleRescanFolder}
+            />
+          )}
+
+          {/* RECENT SEARCHES VIEW */}
+          {activeNav === 'recent_searches' && (
+            <SearchHistoryView
+              history={history}
+              onSelectQuery={(q) => {
+                setSearchQuery(q);
+                handleExecuteSearch(q);
+              }}
+              onClearHistory={handleClearHistory}
+            />
+          )}
+
+          {/* SAVED SEARCHES VIEW */}
+          {activeNav === 'saved_searches' && (
+            <SavedSearchesView
+              savedSearches={savedSearches}
+              onSelectQuery={(q) => {
+                setSearchQuery(q);
+                handleExecuteSearch(q);
+              }}
+              onDeleteSavedSearch={handleDeleteSavedSearch}
+            />
+          )}
+
+          {/* SETTINGS VIEW */}
+          {activeNav === 'settings' && (
+            <SettingsDialog
+              systemStatus={systemStatus}
+              animationEnabled={animationEnabled}
+              onToggleAnimation={() => setAnimationEnabled((prev) => !prev)}
+              defaultViewMode={viewMode}
+              onChangeDefaultView={setViewMode}
+            />
+          )}
+        </main>
+      </div>
+
+      {/* 4. Right-Side File Preview Drawer */}
+      {selectedFile && (
+        <PreviewDrawer
+          file={selectedFile}
+          onClose={() => setSelectedFile(null)}
+          onOpenFile={handleOpenFile}
+        />
+      )}
+    </div>
+  );
+};

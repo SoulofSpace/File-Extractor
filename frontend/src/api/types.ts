@@ -1,0 +1,138 @@
+export interface MatchEvidence {
+  subject_match?: number;
+  attribute_match?: number;
+  bound_attribute_match?: number;
+  clothing_match?: number;
+  object_match?: number;
+  action_match?: number;
+  relationship_match?: number;
+  scene_match?: number;
+  CLIP?: number;
+  SBERT?: number;
+  BM25?: number;
+  OCR?: number;
+  metadata?: number;
+  coordination?: number;
+  contradiction?: number;
+  final_score?: number;
+  clip_similarity?: number;
+  sbert_similarity?: number;
+  bm25_score?: number;
+  coordination_score?: number;
+  contradiction_penalty?: number;
+  vlm_score?: number;
+}
+
+export interface DocumentUnderstanding {
+  document_type?: string;
+  description?: string;
+  extracted_title?: string;
+  detected_dates?: string[];
+  prizes_amounts?: string[];
+  primary_objects?: string[];
+  visual_concepts?: string[];
+  activities?: string[];
+  people_entities?: string[];
+  relationships?: string[];
+  confidence?: number;
+}
+
+export interface SearchResultItem {
+  file_id: number;
+  filename: string;
+  path: string;
+  extension: string;
+  size_bytes: number;
+  category: string;
+  created_at: string;
+  modified_at: string;
+  relevance_score: number;
+  ai_badge?: string;
+  ai_explanation?: string;
+  match_evidence?: MatchEvidence;
+  snippet?: string;
+  extracted_text?: string;
+  ocr_text?: string;
+}
+
+export interface QueryPlanInfo {
+  is_visual?: boolean;
+  is_academic?: boolean;
+  raw_query?: string;
+  category_filter?: string | null;
+  active_roles?: string[];
+  subjects?: string[];
+  attributes?: string[];
+  clothing?: string[];
+  objects?: string[];
+  actions?: string[];
+  scene?: string[];
+  relationships?: string[];
+}
+
+export interface SearchResponse {
+  query: string;
+  category: string;
+  total_results: number;
+  unfiltered_count: number;
+  elapsed_ms: number;
+  summary: string;
+  query_plan?: QueryPlanInfo;
+  results: SearchResultItem[];
+}
+
+export interface SearchRequest {
+  query: string;
+  category?: string;
+  formats?: string[];
+  sort_by?: 'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name';
+  limit?: number;
+  save_history?: boolean;
+}
+
+export interface FolderItem {
+  id: number;
+  path: string;
+  added_at: string;
+  last_scanned_at?: string;
+  file_count: number;
+}
+
+export interface IndexingStatus {
+  is_scanning: boolean;
+  current_folder: string;
+  current_file: string;
+  current_count: number;
+  total_count: number;
+  failures: number;
+  last_error?: string;
+}
+
+export interface SystemStatus {
+  status: string;
+  database_path: string;
+  total_files: number;
+  folder_count: number;
+  ai_models: {
+    dense_sbert: string;
+    vision_clip: string;
+    vlm_qwen: string;
+  };
+  indexing: IndexingStatus;
+}
+
+export interface SearchHistoryItem {
+  id: number;
+  query: string;
+  result_count: number;
+  latency_ms: number;
+  summary: string;
+  created_at: string;
+}
+
+export interface SavedSearchItem {
+  id: number;
+  query: string;
+  name: string;
+  created_at: string;
+}
