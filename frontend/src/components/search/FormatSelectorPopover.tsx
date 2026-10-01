@@ -56,7 +56,7 @@ export const FormatSelectorPopover: React.FC<FormatSelectorPopoverProps> = ({
   return (
     <div
       ref={popoverRef}
-      className="absolute top-full left-0 mt-2 w-64 rounded-2xl bg-[#14151a]/95 border border-white/10 shadow-[0_16px_48px_rgba(0,0,0,0.6)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150"
+      className="absolute top-full left-0 mt-2 w-64 rounded-2xl bg-[#14151a] border border-white/20 shadow-[0_24px_60px_rgba(0,0,0,0.95),0_0_0_1px_rgba(255,255,255,0.1)] backdrop-blur-2xl z-50 overflow-hidden flex flex-col animate-in fade-in zoom-in-95 duration-150"
     >
       {/* Popover Header */}
       <div className="flex items-center justify-between px-4 py-3 border-b border-white/[0.08] bg-white/[0.02]">

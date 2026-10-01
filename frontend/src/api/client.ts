@@ -29,6 +29,16 @@ export const apiClient = {
     return res.json();
   },
 
+  async getRecentFiles(limit = 12, category?: string): Promise<SearchResultItem[]> {
+    const url = category
+      ? `${API_BASE}/api/recent-files?limit=${limit}&category=${encodeURIComponent(category)}`
+      : `${API_BASE}/api/recent-files?limit=${limit}`;
+    const res = await fetch(url);
+    if (!res.ok) throw new Error(`Get recent files failed: ${res.statusText}`);
+    const data = await res.json();
+    return data.files || [];
+  },
+
   async getFileDetail(fileId: number): Promise<SearchResultItem & { document_understanding?: DocumentUnderstanding }> {
     const res = await fetch(`${API_BASE}/api/file/${fileId}`);
     if (!res.ok) throw new Error(`Get file detail failed: ${res.statusText}`);

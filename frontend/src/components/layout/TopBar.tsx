@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, FolderSync, ShieldCheck } from 'lucide-react';
+import { FolderSync, ShieldCheck } from 'lucide-react';
 import { SearchBar } from '../search/SearchBar';
 
 interface TopBarProps {
@@ -36,9 +36,9 @@ export const TopBar: React.FC<TopBarProps> = ({
             activeFilterCount={activeFilterCount}
           />
         ) : (
-          <div className="flex items-center gap-2 text-xs font-semibold text-zinc-400">
-            <Sparkles className="w-3.5 h-3.5 text-sky-400" />
-            <span className="tracking-wide">AI-POWERED LOCAL RETRIEVAL</span>
+          <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 font-mono">
+            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
+            <span className="tracking-wide">DESKTOP FILE INDEX</span>
           </div>
         )}
       </div>

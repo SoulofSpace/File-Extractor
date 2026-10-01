@@ -44,7 +44,7 @@ export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
   };
 
   return (
-    <div className="flex items-center gap-1.5 flex-wrap">
+    <div className="flex items-center gap-1.5 flex-wrap relative z-40">
       {CATEGORIES_CONFIG.map((cat) => {
         const isCurrent = currentCategory.toUpperCase() === cat.id.toUpperCase();
         const catFormats = cat.formats?.map((f) => f.ext.toLowerCase()) || [];
@@ -53,7 +53,7 @@ export const CategoryFilterBar: React.FC<CategoryFilterBarProps> = ({
         const isPopoverOpen = openPopoverId === cat.id;
 
         return (
-          <div key={cat.id} className="relative">
+          <div key={cat.id} className="relative z-40">
             <div
               className={`flex items-center rounded-xl text-xs font-medium border transition-all duration-150 ${
                 isCurrent || hasActiveSub

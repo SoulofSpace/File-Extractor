@@ -26,6 +26,19 @@ from .query_planner import QueryPlan, QueryPlanner, ACRONYM_MAP, ASSIGNMENT_REGE
 from .reranker import CandidateReranker
 from .vision_search import search_images_with_clip
 
+CATEGORY_EXTS_MAP = {
+    "document": {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf", ".pptx", ".ppt", ".xlsx", ".xls", ".csv", ".tsv", ".odt", ".ods", ".epub"},
+    "documents": {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf", ".pptx", ".ppt", ".xlsx", ".xls", ".csv", ".tsv", ".odt", ".ods", ".epub"},
+    "image": {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".svg", ".ico"},
+    "images": {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".svg", ".ico"},
+    "video": {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"},
+    "videos": {".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"},
+    "audio": {".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".wma"},
+    "code": {".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".c", ".cpp", ".h", ".cs", ".go", ".rs", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".sql", ".sh", ".bat"},
+    "archive": {".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"},
+    "archives": {".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"},
+}
+
 
 class AIAgent:
     """
@@ -284,10 +297,25 @@ class AIAgent:
             rec = entry["record"]
 
             # Filter by category if explicitly requested by user
-            if user_category:
+            if user_category and user_category.strip().upper() != "ALL":
                 cat_norm = user_category.strip().lower()
-                rec_cat = str(rec.get("file_type", "")).strip().lower()
-                if rec_cat and rec_cat != cat_norm:
+                cat_exts = CATEGORY_EXTS_MAP.get(cat_norm, set())
+                rec_ext = str(rec.get("extension", "")).strip().lower()
+                rec_type = str(rec.get("file_type", "")).strip().lower()
+                rec_cat = str(rec.get("category", "")).strip().lower()
+
+                matches_cat = (
+                    (rec_ext in cat_exts)
+                    or (cat_norm in rec_type)
+                    or (cat_norm in rec_cat)
+                    or (cat_norm in ("document", "documents") and any(w in rec_type for w in ("pdf", "word", "document", "text", "sheet", "presentation", "markdown")))
+                    or (cat_norm in ("image", "images") and any(w in rec_type for w in ("image", "photo", "picture", "jpeg", "png", "webp", "gif")))
+                    or (cat_norm in ("video", "videos") and any(w in rec_type for w in ("video", "movie", "clip", "mp4", "mkv", "avi")))
+                    or (cat_norm in ("audio", "audio") and any(w in rec_type for w in ("audio", "sound", "music", "song", "voice", "recording")))
+                    or (cat_norm in ("code", "code") and any(w in rec_type for w in ("source", "code", "script", "program", "python", "javascript", "typescript", "c++", "java")))
+                    or (cat_norm in ("archive", "archives") and any(w in rec_type for w in ("archive", "zip", "compressed", "tar", "rar")))
+                )
+                if not matches_cat:
                     continue
 
             # Filter by extension if specified in query

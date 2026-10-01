@@ -125,11 +125,29 @@ def get_system_status():
         except Exception:
             pass
 
+        # Compute category counts for frontend library cards
+        category_counts = {}
+        try:
+            from intellifile.database import CATEGORY_EXTS
+            with db.connection() as conn:
+                for cat_k, cat_v in CATEGORY_EXTS.items():
+                    if cat_k in ("Media", "Spreadsheet", "Presentation"):
+                        continue
+                    pl = ",".join("?" for _ in cat_v)
+                    c_row = conn.execute(
+                        f"SELECT COUNT(*) FROM files WHERE LOWER(extension) IN ({pl}) AND indexing_status = 'indexed'",
+                        list(cat_v)
+                    ).fetchone()
+                    category_counts[cat_k.upper()] = c_row[0] if c_row else 0
+        except Exception:
+            pass
+
         return {
             "status": "healthy",
             "database_path": str(db.path),
             "total_files": total_files,
             "folder_count": len(folders),
+            "category_counts": category_counts,
             "ai_models": {
                 "dense_sbert": "all-MiniLM-L6-v2 (Active)",
                 "vision_clip": "clip-ViT-B-32 (Active)",
@@ -149,26 +167,21 @@ def search_files(req: SearchRequest):
     t0 = time.perf_counter()
 
     query_text = (req.query or "").strip()
-    if not query_text:
-        return {
-            "query": "",
-            "category": req.category,
-            "total_results": 0,
-            "elapsed_ms": 0.0,
-            "summary": "Empty query",
-            "query_plan": {},
-            "results": [],
-        }
-
     cat_filter = None if (not req.category or req.category.upper() == "ALL") else req.category.lower()
 
-    # Execute search via AIAgent
-    raw_results = agent.search(
-        query_text,
-        user_category=cat_filter,
-        limit=max(req.limit or 60, 60),
-        debug=False,
-    )
+    # Broad browse mode when query is empty or "*"
+    if not query_text or query_text == "*":
+        cat_db = cat_filter.capitalize() if cat_filter else None
+        recent_hits = db.get_recent_files(category=cat_db, limit=max(req.limit or 60, 60))
+        raw_results = recent_hits
+    else:
+        # Execute search via AIAgent
+        raw_results = agent.search(
+            query_text,
+            user_category=cat_filter,
+            limit=max(req.limit or 60, 60),
+            debug=False,
+        )
 
     # Normalize all fields on each result dictionary for frontend reliability
     for r in raw_results:
@@ -333,6 +346,35 @@ def get_file_thumbnail(file_id: int, size: int = 360):
             return FileResponse(file_path)
 
     raise HTTPException(status_code=415, detail="Format does not support raster thumbnail")
+
+
+@app.get("/api/recent-files")
+def get_recent_files(limit: int = 12, category: Optional[str] = None):
+    db, _ = get_services()
+    try:
+        cat_name = category.capitalize() if (category and category.upper() != "ALL") else None
+        files = db.get_recent_files(category=cat_name, limit=limit)
+        normalized = []
+        for r in files:
+            fid = r.get("id") or r.get("file_id") or 0
+            p_str = str(r.get("path") or "")
+            p_obj = Path(p_str) if p_str else None
+            r["file_id"] = fid
+            r["id"] = fid
+            r["filename"] = r.get("filename") or (p_obj.name if p_obj else "Untitled")
+            ext = r.get("extension") or (p_obj.suffix if p_obj else "")
+            r["extension"] = (ext or "").lower()
+            cat = r.get("category") or r.get("file_type") or "File"
+            r["category"] = cat
+            r["file_type"] = r.get("file_type") or cat
+            r["size_bytes"] = int(r.get("size_bytes") or 0)
+            r["modified_at"] = r.get("modified_at") or 0
+            r["relevance_score"] = 0.0
+            r["match_evidence"] = {}
+            normalized.append(r)
+        return {"files": normalized}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ── Folder Management & Indexing Endpoints ────────────────────────────────────

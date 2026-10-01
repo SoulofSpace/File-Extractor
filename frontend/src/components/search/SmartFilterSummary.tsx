@@ -1,5 +1,5 @@
 import React from 'react';
-import { Sparkles, ArrowUpDown, LayoutGrid, List } from 'lucide-react';
+import { ArrowUpDown, LayoutGrid, List } from 'lucide-react';
 import { CategoryFilterBar } from './CategoryFilterBar';
 import { ActiveFilterChips } from './ActiveFilterChips';
 
@@ -39,19 +39,30 @@ export const SmartFilterSummary: React.FC<SmartFilterSummaryProps> = ({
   isVisualQuery = false,
 }) => {
   return (
-    <div className="w-full max-w-6xl mx-auto px-4 py-3 space-y-2.5 bg-[#121318]/70 border border-white/[0.08] rounded-2xl backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
+    <div className="relative z-40 w-full max-w-6xl mx-auto px-4 py-3 space-y-2.5 bg-[#121318]/90 border border-white/[0.08] rounded-2xl backdrop-blur-xl shadow-[0_8px_24px_rgba(0,0,0,0.35)]">
       {/* Top Row: Query Context + Search Mode Badge + Result Count + Controls */}
       <div className="flex items-center justify-between gap-4 flex-wrap">
         {/* Left: Query & Mode info */}
         <div className="flex items-center gap-3">
           <div className="flex items-center gap-1.5 text-xs text-zinc-400">
-            <span className="text-zinc-500 font-medium">Search:</span>
-            <span className="font-semibold text-white truncate max-w-xs">{query}</span>
+            <span className="text-zinc-500 font-medium">
+              {query === '*' || !query ? 'Browsing:' : 'Search:'}
+            </span>
+            <span className="font-semibold text-white truncate max-w-xs">
+              {query === '*' || !query
+                ? currentCategory === 'ALL'
+                  ? 'All Files'
+                  : currentCategory.charAt(0) + currentCategory.slice(1).toLowerCase()
+                : query}
+            </span>
           </div>
 
-          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-gradient-to-r from-sky-500/20 to-indigo-500/20 text-sky-300 border border-sky-500/30 text-[11px] font-medium tracking-wide">
-            <Sparkles className="w-3 h-3 text-sky-400" />
-            {isVisualQuery ? 'Multimodal Visual AI' : 'Hybrid AI Search'}
+          <span className="inline-flex items-center gap-1 px-2 py-0.5 rounded-full bg-white/[0.05] text-zinc-300 border border-white/[0.1] text-[11px] font-medium tracking-wide">
+            {query === '*' || !query
+              ? 'Library Browse'
+              : isVisualQuery
+              ? 'Visual Search'
+              : 'Indexed Search'}
           </span>
 
           <span className="text-xs font-mono font-medium text-zinc-400 bg-white/[0.04] px-2.5 py-0.5 rounded-full border border-white/[0.06]">
@@ -111,7 +122,7 @@ export const SmartFilterSummary: React.FC<SmartFilterSummaryProps> = ({
       </div>
 
       {/* Middle Row: Primary Category Filter Buttons with Dropdowns */}
-      <div className="pt-1 border-t border-white/[0.06]">
+      <div className="pt-1 border-t border-white/[0.06] relative z-40">
         <CategoryFilterBar
           currentCategory={currentCategory}
           onSelectCategory={onSelectCategory}

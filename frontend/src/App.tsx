@@ -49,6 +49,7 @@ export const App: React.FC = () => {
   const [folders, setFolders] = useState<FolderItem[]>([]);
   const [history, setHistory] = useState<SearchHistoryItem[]>([]);
   const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
+  const [recentFiles, setRecentFiles] = useState<SearchResultItem[]>([]);
   const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>({
     is_scanning: false,
     current_folder: '',
@@ -58,22 +59,24 @@ export const App: React.FC = () => {
     failures: 0,
   });
 
-  // Settings
-  const [animationEnabled, setAnimationEnabled] = useState(true);
+  // Settings: default animation to false for clean, non-AI native desktop appearance
+  const [animationEnabled, setAnimationEnabled] = useState(false);
 
   // Load Initial Data
   const refreshSystemData = useCallback(async () => {
     try {
-      const [status, folderList, hist, saved] = await Promise.all([
+      const [status, folderList, hist, saved, recent] = await Promise.all([
         apiClient.getStatus(),
         apiClient.getFolders(),
         apiClient.getSearchHistory(40),
         apiClient.getSavedSearches(),
+        apiClient.getRecentFiles(12),
       ]);
       setSystemStatus(status);
       setFolders(folderList);
       setHistory(hist);
       setSavedSearches(saved);
+      setRecentFiles(recent || []);
       if (status.indexing) {
         setIndexingStatus(status.indexing);
       }
@@ -100,14 +103,30 @@ export const App: React.FC = () => {
       queryToSearch: string,
       category = currentCategory,
       formats = selectedFormats,
-      sort = sortBy
+      sort = sortBy,
+      targetNav?: NavItemKey
     ) => {
       const q = queryToSearch.trim();
       if (!q) return;
 
       setIsSearching(true);
       setSubmittedQuery(q);
-      setActiveNav('all');
+
+      if (targetNav) {
+        setActiveNav(targetNav);
+      } else if (category && category !== 'ALL') {
+        const navMap: Record<string, NavItemKey> = {
+          IMAGE: 'images',
+          DOCUMENT: 'documents',
+          VIDEO: 'videos',
+          AUDIO: 'audio',
+          CODE: 'code',
+          ARCHIVE: 'archives',
+        };
+        setActiveNav(navMap[category.toUpperCase()] || 'all');
+      } else {
+        setActiveNav('all');
+      }
 
       try {
         const response = await apiClient.search({
@@ -115,8 +134,8 @@ export const App: React.FC = () => {
           category,
           formats,
           sort_by: sort,
-          limit: 60,
-          save_history: true,
+          limit: 100,
+          save_history: q !== '*',
         });
 
         const rawList = Array.isArray(response?.results) ? response.results : [];
@@ -155,9 +174,8 @@ export const App: React.FC = () => {
   // Category change handler
   const handleCategorySelect = (catId: string) => {
     setCurrentCategory(catId);
-    if (submittedQuery) {
-      handleExecuteSearch(submittedQuery, catId, selectedFormats, sortBy);
-    }
+    const q = submittedQuery || '*';
+    handleExecuteSearch(q, catId, selectedFormats, sortBy);
   };
 
   // Format toggle handler
@@ -166,42 +184,37 @@ export const App: React.FC = () => {
       ? selectedFormats.filter((f) => f !== ext)
       : [...selectedFormats, ext];
     setSelectedFormats(nextFormats);
-    if (submittedQuery) {
-      handleExecuteSearch(submittedQuery, currentCategory, nextFormats, sortBy);
-    }
+    const q = submittedQuery || '*';
+    handleExecuteSearch(q, currentCategory, nextFormats, sortBy);
   };
 
   const handleSelectAllFormats = (exts: string[]) => {
     const combined = Array.from(new Set([...selectedFormats, ...exts]));
     setSelectedFormats(combined);
-    if (submittedQuery) {
-      handleExecuteSearch(submittedQuery, currentCategory, combined, sortBy);
-    }
+    const q = submittedQuery || '*';
+    handleExecuteSearch(q, currentCategory, combined, sortBy);
   };
 
   const handleClearCategoryFormats = (exts: string[]) => {
     const filtered = selectedFormats.filter((f) => !exts.includes(f));
     setSelectedFormats(filtered);
-    if (submittedQuery) {
-      handleExecuteSearch(submittedQuery, currentCategory, filtered, sortBy);
-    }
+    const q = submittedQuery || '*';
+    handleExecuteSearch(q, currentCategory, filtered, sortBy);
   };
 
   const handleClearAllFilters = () => {
     setCurrentCategory('ALL');
     setSelectedFormats([]);
-    if (submittedQuery) {
-      handleExecuteSearch(submittedQuery, 'ALL', [], sortBy);
-    }
+    const q = submittedQuery || '*';
+    handleExecuteSearch(q, 'ALL', [], sortBy);
   };
 
   const handleSortChange = (
     newSort: 'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name'
   ) => {
     setSortBy(newSort);
-    if (submittedQuery) {
-      handleExecuteSearch(submittedQuery, currentCategory, selectedFormats, newSort);
-    }
+    const q = submittedQuery || '*';
+    handleExecuteSearch(q, currentCategory, selectedFormats, newSort);
   };
 
   // Open File
@@ -218,6 +231,15 @@ export const App: React.FC = () => {
     setActiveNav(key);
     setSelectedFile(null);
 
+    if (key === 'home') {
+      setSearchQuery('');
+      setSubmittedQuery('');
+      setCurrentCategory('ALL');
+      setSelectedFormats([]);
+      refreshSystemData();
+      return;
+    }
+
     // If selecting a category from the sidebar (Images, Documents, Videos, etc.)
     const categoryMapping: Partial<Record<NavItemKey, string>> = {
       images: 'IMAGE',
@@ -232,11 +254,11 @@ export const App: React.FC = () => {
     if (categoryMapping[key]) {
       const cat = categoryMapping[key]!;
       setCurrentCategory(cat);
-      if (submittedQuery) {
-        handleExecuteSearch(submittedQuery, cat, selectedFormats, sortBy);
+      if (submittedQuery && submittedQuery !== '*') {
+        handleExecuteSearch(submittedQuery, cat, selectedFormats, sortBy, key);
       } else {
         // Run broad category browse
-        handleExecuteSearch('*', cat, [], sortBy);
+        handleExecuteSearch('*', cat, [], sortBy, key);
       }
     }
   };
@@ -269,7 +291,7 @@ export const App: React.FC = () => {
   };
 
   // Check if we are on Home page
-  const isHomePage = activeNav === 'home' && !submittedQuery;
+  const isHomePage = activeNav === 'home';
 
   return (
     <div className="relative flex h-screen w-screen overflow-hidden bg-[#0a0b0e] text-[#f4f4f5]">
@@ -308,18 +330,22 @@ export const App: React.FC = () => {
               onQueryChange={setSearchQuery}
               onSearch={(q) => handleExecuteSearch(q)}
               isLoading={isSearching}
-              onQuickCategory={(cat) => {
+              onSelectCategory={(cat) => {
                 setCurrentCategory(cat);
-                handleExecuteSearch('photo', cat);
+                handleExecuteSearch('*', cat);
               }}
-              onQuickRecentSearches={() => setActiveNav('recent_searches')}
+              categoryCounts={systemStatus?.category_counts}
+              totalFiles={systemStatus?.total_files || 0}
+              recentFiles={recentFiles}
+              recentSearches={history.slice(0, 6).map((h) => h.query)}
+              onOpenFile={handleOpenFile}
+              onSelectFile={setSelectedFile}
             />
           )}
 
           {/* SEARCH RESULTS VIEW */}
           {(activeNav === 'all' ||
-            ['images', 'documents', 'videos', 'audio', 'code', 'archives'].includes(activeNav)) &&
-            submittedQuery && (
+            ['images', 'documents', 'videos', 'audio', 'code', 'archives'].includes(activeNav)) && (
               <div className="space-y-4 max-w-6xl mx-auto">
                 {/* Smart Filter Summary */}
                 <SmartFilterSummary

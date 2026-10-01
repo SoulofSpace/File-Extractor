@@ -114,6 +114,7 @@ export interface SystemStatus {
   database_path: string;
   total_files: number;
   folder_count: number;
+  category_counts?: Record<string, number>;
   ai_models: {
     dense_sbert: string;
     vision_clip: string;

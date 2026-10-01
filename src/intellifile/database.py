@@ -11,17 +11,21 @@ from typing import Any, Dict, Iterator, List, Optional
 from .models import DiscoveredFile
 
 CATEGORY_EXTS = {
-    "Document": (".pdf", ".docx", ".txt", ".md", ".rtf"),
-    "Image": (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif"),
+    "Document": (
+        ".pdf", ".docx", ".doc", ".txt", ".md", ".rtf",
+        ".pptx", ".ppt", ".xlsx", ".xls", ".csv", ".tsv",
+        ".odt", ".ods", ".epub"
+    ),
+    "Image": (".jpg", ".jpeg", ".png", ".webp", ".bmp", ".tiff", ".gif", ".svg", ".ico"),
     "Video": (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v"),
     "Audio": (".mp3", ".wav", ".flac", ".aac", ".m4a", ".ogg", ".wma"),
     "Spreadsheet": (".xlsx", ".xls", ".csv", ".tsv"),
     "Presentation": (".pptx", ".ppt"),
     "Code": (
         ".py", ".js", ".ts", ".jsx", ".tsx", ".java", ".c", ".cpp", ".h",
-        ".cs", ".go", ".rs", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".sql"
+        ".cs", ".go", ".rs", ".html", ".css", ".json", ".xml", ".yaml", ".yml", ".sql", ".sh", ".bat"
     ),
-    "Archive": (".zip", ".rar", ".7z", ".tar", ".gz"),
+    "Archive": (".zip", ".rar", ".7z", ".tar", ".gz", ".bz2", ".xz"),
     "Media": (".mp4", ".mkv", ".avi", ".mov", ".wmv", ".flv", ".webm", ".m4v", ".mp3", ".wav", ".flac", ".aac", ".m4a"),
 }
 
