@@ -21,6 +21,7 @@ import {
   IndexingStatus
 } from './api/types';
 import { Loader2, FileQuestion } from 'lucide-react';
+import { ErrorBoundary } from './components/common/ErrorBoundary';
 
 export const App: React.FC = () => {
   // Navigation State
@@ -118,14 +119,26 @@ export const App: React.FC = () => {
           save_history: true,
         });
 
-        setResults(response.results || []);
-        setTotalResults(response.total_results || 0);
-        setElapsedMs(response.elapsed_ms || 0);
-        setIsVisualQuery(Boolean(response.query_plan?.is_visual));
+        const rawList = Array.isArray(response?.results) ? response.results : [];
+        const safeResults: SearchResultItem[] = rawList.map((r: any) => ({
+          ...r,
+          file_id: r.file_id || r.id || 0,
+          filename: r.filename || 'Untitled',
+          extension: (r.extension || '').toLowerCase(),
+          category: r.category || r.file_type || 'File',
+          size_bytes: Number(r.size_bytes || 0),
+          relevance_score: Number(r.relevance_score || 0),
+          match_evidence: r.match_evidence || {},
+        }));
+
+        setResults(safeResults);
+        setTotalResults(Number(response?.total_results || safeResults.length));
+        setElapsedMs(Number(response?.elapsed_ms || 0));
+        setIsVisualQuery(Boolean(response?.query_plan?.is_visual));
 
         // Preserve selected file if present in new results
         if (selectedFile) {
-          const match = response.results.find((r) => r.file_id === selectedFile.file_id);
+          const match = safeResults.find((r) => r.file_id === selectedFile.file_id);
           setSelectedFile(match || null);
         }
       } catch (err) {
@@ -328,43 +341,45 @@ export const App: React.FC = () => {
                 />
 
                 {/* Results Section */}
-                {isSearching ? (
-                  <div className="flex flex-col items-center justify-center p-24 text-center space-y-3">
-                    <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
-                    <span className="text-sm font-medium text-zinc-300">Searching your files with local AI...</span>
-                  </div>
-                ) : results.length > 0 ? (
-                  viewMode === 'grid' ? (
-                    <FileGrid
-                      files={results}
-                      selectedFile={selectedFile}
-                      onSelectFile={setSelectedFile}
-                      onOpenFile={(p) => handleOpenFile(p)}
-                    />
+                <ErrorBoundary fallbackTitle="Results Rendering Error" onReset={handleClearAllFilters}>
+                  {isSearching ? (
+                    <div className="flex flex-col items-center justify-center p-24 text-center space-y-3">
+                      <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
+                      <span className="text-sm font-medium text-zinc-300">Searching your files with local AI...</span>
+                    </div>
+                  ) : results.length > 0 ? (
+                    viewMode === 'grid' ? (
+                      <FileGrid
+                        files={results}
+                        selectedFile={selectedFile}
+                        onSelectFile={setSelectedFile}
+                        onOpenFile={(p) => handleOpenFile(p)}
+                      />
+                    ) : (
+                      <FileList
+                        files={results}
+                        selectedFile={selectedFile}
+                        onSelectFile={setSelectedFile}
+                        onOpenFile={(p) => handleOpenFile(p)}
+                      />
+                    )
                   ) : (
-                    <FileList
-                      files={results}
-                      selectedFile={selectedFile}
-                      onSelectFile={setSelectedFile}
-                      onOpenFile={(p) => handleOpenFile(p)}
-                    />
-                  )
-                ) : (
-                  <div className="flex flex-col items-center justify-center p-20 text-center space-y-3 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
-                    <FileQuestion className="w-10 h-10 text-zinc-500" />
-                    <h3 className="text-base font-semibold text-white">No files matched those filters</h3>
-                    <p className="text-xs text-zinc-400 max-w-sm">
-                      Try broadening your search query or clearing active format extensions.
-                    </p>
-                    <button
-                      type="button"
-                      onClick={handleClearAllFilters}
-                      className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors mt-2"
-                    >
-                      Clear all filters
-                    </button>
-                  </div>
-                )}
+                    <div className="flex flex-col items-center justify-center p-20 text-center space-y-3 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
+                      <FileQuestion className="w-10 h-10 text-zinc-500" />
+                      <h3 className="text-base font-semibold text-white">No files matched those filters</h3>
+                      <p className="text-xs text-zinc-400 max-w-sm">
+                        Try broadening your search query or clearing active format extensions.
+                      </p>
+                      <button
+                        type="button"
+                        onClick={handleClearAllFilters}
+                        className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors mt-2"
+                      >
+                        Clear all filters
+                      </button>
+                    </div>
+                  )}
+                </ErrorBoundary>
               </div>
             )}
 
@@ -418,11 +433,13 @@ export const App: React.FC = () => {
 
       {/* 4. Right-Side File Preview Drawer */}
       {selectedFile && (
-        <PreviewDrawer
-          file={selectedFile}
-          onClose={() => setSelectedFile(null)}
-          onOpenFile={handleOpenFile}
-        />
+        <ErrorBoundary fallbackTitle="Preview Error" onReset={() => setSelectedFile(null)}>
+          <PreviewDrawer
+            file={selectedFile}
+            onClose={() => setSelectedFile(null)}
+            onOpenFile={handleOpenFile}
+          />
+        </ErrorBoundary>
       )}
     </div>
   );

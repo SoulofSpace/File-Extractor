@@ -14,35 +14,42 @@ interface FileCardProps {
 export const FileCard: React.FC<FileCardProps> = ({ file, isSelected, onSelect, onOpen }) => {
   const [imgError, setImgError] = useState(false);
 
-  const formatSize = (bytes: number) => {
-    if (!bytes || bytes === 0) return '0 B';
+  const formatSize = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + (sizes[i] || 'B');
   };
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '—';
+  const formatDate = (dateVal?: string | number) => {
+    if (!dateVal) return '—';
     try {
-      const d = new Date(dateStr);
+      const num = typeof dateVal === 'number' ? dateVal : parseFloat(String(dateVal));
+      if (!isNaN(num) && num > 0) {
+        const ms = num < 1e11 ? num * 1000 : num;
+        return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal).slice(0, 10);
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
-      return dateStr.slice(0, 10);
+      return String(dateVal).slice(0, 10);
     }
   };
 
-  const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(file.extension.toLowerCase());
-  const isVideo = ['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(file.extension.toLowerCase());
-  const isAudio = ['.mp3', '.wav', '.flac', '.m4a'].includes(file.extension.toLowerCase());
-  const isCode = ['.py', '.js', '.ts', '.tsx', '.jsx', '.c', '.cpp', '.html', '.css', '.json', '.sql'].includes(file.extension.toLowerCase());
+  const ext = (file.extension || '').toLowerCase();
+  const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
+  const isVideo = ['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(ext);
+  const isAudio = ['.mp3', '.wav', '.flac', '.m4a'].includes(ext);
+  const isCode = ['.py', '.js', '.ts', '.tsx', '.jsx', '.c', '.cpp', '.html', '.css', '.json', '.sql'].includes(ext);
 
   const getFileIcon = () => {
     if (isImage) return <ImageIcon className="w-5 h-5 text-sky-400" />;
     if (isVideo) return <Film className="w-5 h-5 text-rose-400" />;
     if (isAudio) return <Music className="w-5 h-5 text-amber-400" />;
     if (isCode) return <Code2 className="w-5 h-5 text-emerald-400" />;
-    if (['.zip', '.rar', '.7z'].includes(file.extension.toLowerCase()))
+    if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext))
       return <Archive className="w-5 h-5 text-purple-400" />;
     return <FileText className="w-5 h-5 text-zinc-400" />;
   };
@@ -62,7 +69,7 @@ export const FileCard: React.FC<FileCardProps> = ({ file, isSelected, onSelect, 
         {isImage && !imgError ? (
           <img
             src={apiClient.getThumbnailUrl(file.file_id, 400)}
-            alt={file.filename}
+            alt={file.filename || ''}
             onError={() => setImgError(true)}
             className="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105"
             loading="lazy"
@@ -73,7 +80,7 @@ export const FileCard: React.FC<FileCardProps> = ({ file, isSelected, onSelect, 
               {getFileIcon()}
             </div>
             <span className="font-mono text-[11px] text-zinc-400 uppercase font-semibold">
-              {file.extension.replace('.', '')}
+              {ext.replace('.', '') || file.file_type || file.category || 'FILE'}
             </span>
           </div>
         )}

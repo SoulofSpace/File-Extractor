@@ -16,26 +16,32 @@ export const FileList: React.FC<FileListProps> = ({
   onSelectFile,
   onOpenFile,
 }) => {
-  const formatSize = (bytes: number) => {
-    if (!bytes || bytes === 0) return '0 B';
+  const formatSize = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + (sizes[i] || 'B');
   };
 
-  const formatDate = (dateStr: string) => {
-    if (!dateStr) return '—';
+  const formatDate = (dateVal?: string | number) => {
+    if (!dateVal) return '—';
     try {
-      const d = new Date(dateStr);
+      const num = typeof dateVal === 'number' ? dateVal : parseFloat(String(dateVal));
+      if (!isNaN(num) && num > 0) {
+        const ms = num < 1e11 ? num * 1000 : num;
+        return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal).slice(0, 10);
       return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
     } catch {
-      return dateStr.slice(0, 10);
+      return String(dateVal).slice(0, 10);
     }
   };
 
-  const getFileIcon = (ext: string) => {
-    const e = ext.toLowerCase();
+  const getFileIcon = (extStr: string) => {
+    const e = (extStr || '').toLowerCase();
     if (['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(e))
       return <ImageIcon className="w-4 h-4 text-sky-400" />;
     if (['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(e))
@@ -44,7 +50,7 @@ export const FileList: React.FC<FileListProps> = ({
       return <Music className="w-4 h-4 text-amber-400" />;
     if (['.py', '.js', '.ts', '.tsx', '.jsx', '.c', '.cpp', '.html', '.css', '.json', '.sql'].includes(e))
       return <Code2 className="w-4 h-4 text-emerald-400" />;
-    if (['.zip', '.rar', '.7z'].includes(e))
+    if (['.zip', '.rar', '.7z', '.tar', '.gz'].includes(e))
       return <Archive className="w-4 h-4 text-purple-400" />;
     return <FileText className="w-4 h-4 text-zinc-400" />;
   };
@@ -63,7 +69,8 @@ export const FileList: React.FC<FileListProps> = ({
       {/* Rows */}
       {files.map((file) => {
         const isSelected = selectedFile?.file_id === file.file_id;
-        const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(file.extension.toLowerCase());
+        const ext = (file.extension || '').toLowerCase();
+        const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
 
         return (
           <div
@@ -87,15 +94,15 @@ export const FileList: React.FC<FileListProps> = ({
                     loading="lazy"
                   />
                 ) : (
-                  getFileIcon(file.extension)
+                  getFileIcon(ext)
                 )}
               </div>
               <div className="min-w-0">
-                <span className="font-semibold text-white truncate block hover:text-sky-300 transition-colors" title={file.filename}>
-                  {file.filename}
+                <span className="font-semibold text-white truncate block hover:text-sky-300 transition-colors" title={file.filename || ''}>
+                  {file.filename || 'Untitled'}
                 </span>
                 <span className="text-[11px] text-zinc-500 truncate block font-mono">
-                  {file.path}
+                  {file.path || ''}
                 </span>
               </div>
             </div>
@@ -103,7 +110,7 @@ export const FileList: React.FC<FileListProps> = ({
             {/* Type / Category */}
             <div className="col-span-2 flex items-center gap-1.5">
               <span className="px-2 py-0.5 rounded-md bg-white/[0.05] text-zinc-300 border border-white/[0.06] text-[11px] font-medium uppercase font-mono">
-                {file.extension.replace('.', '') || file.category}
+                {ext.replace('.', '') || file.file_type || file.category || 'FILE'}
               </span>
             </div>
 

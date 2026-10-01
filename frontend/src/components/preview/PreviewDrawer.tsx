@@ -30,20 +30,39 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
 
   if (!file) return null;
 
-  const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(file.extension.toLowerCase());
+  const ext = (file.extension || '').toLowerCase();
+  const isImage = ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif'].includes(ext);
 
-  const formatSize = (bytes: number) => {
-    if (!bytes || bytes === 0) return '0 B';
+  const formatSize = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
     const k = 1024;
-    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
     const i = Math.floor(Math.log(bytes) / Math.log(k));
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + (sizes[i] || 'B');
+  };
+
+  const formatDate = (dateVal?: string | number) => {
+    if (!dateVal) return '—';
+    try {
+      const num = typeof dateVal === 'number' ? dateVal : parseFloat(String(dateVal));
+      if (!isNaN(num) && num > 0) {
+        const ms = num < 1e11 ? num * 1000 : num;
+        return new Date(ms).toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+      }
+      const d = new Date(dateVal);
+      if (isNaN(d.getTime())) return String(dateVal).slice(0, 10);
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric', year: 'numeric' });
+    } catch {
+      return String(dateVal).slice(0, 10);
+    }
   };
 
   const copyPath = () => {
-    navigator.clipboard.writeText(file.path);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    if (file.path) {
+      navigator.clipboard.writeText(file.path);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }
   };
 
   const previewText = file.ocr_text || file.extracted_text || file.snippet || '';
@@ -57,7 +76,7 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
             Preview
           </span>
           <span className="px-2 py-0.5 rounded bg-white/[0.06] text-white text-[11px] font-mono font-medium">
-            {file.extension.toUpperCase()}
+            {ext.replace('.', '').toUpperCase() || 'FILE'}
           </span>
         </div>
         <div className="flex items-center gap-1">
@@ -169,11 +188,11 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
               </div>
               <div className="flex justify-between px-3.5 py-2.5">
                 <span className="text-zinc-500 font-medium">Category</span>
-                <span className="text-zinc-200 font-medium">{file.category}</span>
+                <span className="text-zinc-200 font-medium">{file.category || (file as any).file_type || 'File'}</span>
               </div>
               <div className="flex justify-between px-3.5 py-2.5">
                 <span className="text-zinc-500 font-medium">Date Modified</span>
-                <span className="text-zinc-200">{file.modified_at || '—'}</span>
+                <span className="text-zinc-200">{formatDate(file.modified_at)}</span>
               </div>
               <div className="flex justify-between px-3.5 py-2.5">
                 <span className="text-zinc-500 font-medium">Relevance Score</span>

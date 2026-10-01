@@ -144,7 +144,12 @@ class AIAgent:
                     p_str = str(du.get("path", ""))
                     if not p_str:
                         continue
-                    get_or_create(p_str, du)
+                    file_rec = None
+                    fid = du.get("file_id") or du.get("id")
+                    if fid and hasattr(self.database, "get_file_by_id"):
+                        file_rec = self.database.get_file_by_id(fid)
+                    candidate_dict = dict(file_rec) if file_rec else dict(du)
+                    get_or_create(p_str, candidate_dict)
             except Exception as du_err:
                 logger.debug("Document understanding search skipped: %s", du_err)
 
@@ -363,6 +368,12 @@ class AIAgent:
             rec["match_evidence"]["semantic"] = entry["sem_score"]
             rec["match_evidence"]["visual"] = entry["clip_score"]
             rec["match_evidence"]["vlm"] = vlm_s
+
+            if not rec.get("extension") and p_str:
+                rec["extension"] = Path(p_str).suffix
+            if not rec.get("filename") and p_str:
+                rec["filename"] = Path(p_str).name
+
             final_results.append(rec)
 
         # Deterministic sorting: primary sort by rank (negative score), secondary tie-breaker by path

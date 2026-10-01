@@ -7,21 +7,35 @@ interface MatchEvidenceViewProps {
   compact?: boolean;
 }
 
+const safeNum = (val: any): number => {
+  if (typeof val === 'number') return isNaN(val) ? 0 : val;
+  if (typeof val === 'string') {
+    const n = parseFloat(val);
+    return isNaN(n) ? 0 : n;
+  }
+  return 0;
+};
+
 export const MatchEvidenceView: React.FC<MatchEvidenceViewProps> = ({ evidence, compact = false }) => {
   if (!evidence) return null;
 
-  const clipScore = evidence.CLIP ?? evidence.clip_similarity ?? 0;
-  const sbertScore = evidence.SBERT ?? evidence.sbert_similarity ?? 0;
-  const bm25Score = evidence.BM25 ?? evidence.bm25_score ?? 0;
-  const ocrScore = evidence.OCR ?? 0;
-  const coordScore = evidence.coordination ?? evidence.coordination_score ?? 0;
-  const contraPenalty = evidence.contradiction ?? evidence.contradiction_penalty ?? 0;
+  const clipScore = safeNum(evidence.CLIP ?? evidence.clip_similarity);
+  const sbertScore = safeNum(evidence.SBERT ?? evidence.sbert_similarity);
+  const bm25Score = safeNum(evidence.BM25 ?? evidence.bm25_score);
+  const ocrScore = safeNum(evidence.OCR);
+  const coordScore = safeNum(evidence.coordination ?? evidence.coordination_score);
+  const contraPenalty = safeNum(evidence.contradiction ?? evidence.contradiction_penalty);
+
+  const subjectMatch = safeNum(evidence.subject_match);
+  const attributeMatch = safeNum(evidence.attribute_match);
+  const clothingMatch = safeNum(evidence.clothing_match);
+  const objectMatch = safeNum(evidence.object_match);
 
   const hasCompositional =
-    (evidence.subject_match ?? 0) > 0 ||
-    (evidence.attribute_match ?? 0) > 0 ||
-    (evidence.clothing_match ?? 0) > 0 ||
-    (evidence.object_match ?? 0) > 0 ||
+    subjectMatch > 0 ||
+    attributeMatch > 0 ||
+    clothingMatch > 0 ||
+    objectMatch > 0 ||
     coordScore > 0;
 
   if (compact) {
@@ -68,37 +82,37 @@ export const MatchEvidenceView: React.FC<MatchEvidenceViewProps> = ({ evidence, 
       {/* Compositional Tuple Roles */}
       {hasCompositional && (
         <div className="grid grid-cols-2 gap-1.5 py-1">
-          {(evidence.subject_match ?? 0) > 0 && (
+          {subjectMatch > 0 && (
             <div className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
               <span className="text-zinc-400">Subject</span>
               <span className="font-mono text-emerald-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> {(evidence.subject_match! * 100).toFixed(0)}%
+                <CheckCircle2 className="w-3 h-3" /> {(subjectMatch * 100).toFixed(0)}%
               </span>
             </div>
           )}
-          {(evidence.attribute_match ?? 0) > 0 && (
+          {attributeMatch > 0 && (
             <div className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
               <span className="text-zinc-400">
                 {evidence.bound_attribute_match ? 'Bound Attribute' : 'Ambient Color'}
               </span>
               <span className="font-mono text-sky-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> {(evidence.attribute_match! * 100).toFixed(0)}%
+                <CheckCircle2 className="w-3 h-3" /> {(attributeMatch * 100).toFixed(0)}%
               </span>
             </div>
           )}
-          {(evidence.clothing_match ?? 0) > 0 && (
+          {clothingMatch > 0 && (
             <div className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
               <span className="text-zinc-400">Clothing/Outfit</span>
               <span className="font-mono text-purple-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> {(evidence.clothing_match! * 100).toFixed(0)}%
+                <CheckCircle2 className="w-3 h-3" /> {(clothingMatch * 100).toFixed(0)}%
               </span>
             </div>
           )}
-          {(evidence.object_match ?? 0) > 0 && (
+          {objectMatch > 0 && (
             <div className="flex items-center justify-between px-2.5 py-1 rounded-lg bg-white/[0.03] border border-white/[0.05]">
               <span className="text-zinc-400">Target Object</span>
               <span className="font-mono text-amber-400 flex items-center gap-1">
-                <CheckCircle2 className="w-3 h-3" /> {(evidence.object_match! * 100).toFixed(0)}%
+                <CheckCircle2 className="w-3 h-3" /> {(objectMatch * 100).toFixed(0)}%
               </span>
             </div>
           )}

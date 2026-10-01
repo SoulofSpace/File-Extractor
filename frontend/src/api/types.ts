@@ -44,8 +44,9 @@ export interface SearchResultItem {
   extension: string;
   size_bytes: number;
   category: string;
-  created_at: string;
-  modified_at: string;
+  file_type?: string;
+  created_at: string | number;
+  modified_at: string | number;
   relevance_score: number;
   ai_badge?: string;
   ai_explanation?: string;

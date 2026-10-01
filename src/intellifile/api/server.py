@@ -170,11 +170,40 @@ def search_files(req: SearchRequest):
         debug=False,
     )
 
-    # Normalize file_id on each result dictionary
+    # Normalize all fields on each result dictionary for frontend reliability
     for r in raw_results:
-        fid = r.get("file_id") or r.get("id")
+        fid = r.get("file_id") or r.get("id") or 0
         r["file_id"] = fid
         r["id"] = fid
+        
+        p_str = str(r.get("path") or "")
+        p_obj = Path(p_str) if p_str else None
+        
+        if not r.get("filename"):
+            r["filename"] = p_obj.name if p_obj else "Untitled"
+            
+        ext = r.get("extension")
+        if not ext and p_obj:
+            ext = p_obj.suffix
+        r["extension"] = (ext or "").lower()
+        
+        # Ensure category / file_type
+        cat = r.get("category") or r.get("file_type") or "File"
+        r["category"] = cat
+        r["file_type"] = r.get("file_type") or cat
+        
+        # Numeric values
+        r["size_bytes"] = int(r.get("size_bytes") or 0)
+        r["relevance_score"] = float(r.get("relevance_score") or 0.0)
+        r["created_at"] = r.get("created_at") or 0
+        r["modified_at"] = r.get("modified_at") or 0
+        
+        # Strings & evidence
+        r["snippet"] = r.get("snippet") or ""
+        r["ai_badge"] = r.get("ai_badge") or ""
+        r["ai_explanation"] = r.get("ai_explanation") or ""
+        if not isinstance(r.get("match_evidence"), dict):
+            r["match_evidence"] = {}
 
     elapsed_ms = (time.perf_counter() - t0) * 1000.0
 

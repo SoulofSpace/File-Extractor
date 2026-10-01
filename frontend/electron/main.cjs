@@ -77,6 +77,28 @@ function createWindow() {
   // In production or when server is mounted, load API_URL
   mainWindow.loadURL(API_URL);
 
+  // Forward console messages to terminal for instant debugging
+  mainWindow.webContents.on('console-message', (event, level, message, line, sourceId) => {
+    const levels = ['DEBUG', 'INFO', 'WARN', 'ERROR'];
+    console.log(`[Renderer ${levels[level] || level}] ${message} (${sourceId}:${line})`);
+  });
+
+  // Enable F12 and Ctrl+Shift+I to toggle DevTools
+  mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
+      mainWindow.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  // Auto-retry if backend server was binding
+  mainWindow.webContents.on('did-fail-load', () => {
+    console.log('[Electron] Initial page load failed, retrying in 1.5s...');
+    setTimeout(() => {
+      if (mainWindow) mainWindow.loadURL(API_URL);
+    }, 1500);
+  });
+
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     shell.openExternal(url);
     return { action: 'deny' };
