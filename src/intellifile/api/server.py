@@ -148,6 +148,9 @@ def get_system_status():
             "total_files": total_files,
             "folder_count": len(folders),
             "category_counts": category_counts,
+            "qwen_available": qwen_healthy,
+            "embedding_model_loaded": getattr(agent, "embedding_provider", None) is not None,
+            "clip_vision_loaded": True,
             "ai_models": {
                 "dense_sbert": "all-MiniLM-L6-v2 (Active)",
                 "vision_clip": "clip-ViT-B-32 (Active)",

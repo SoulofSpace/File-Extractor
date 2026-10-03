@@ -10,7 +10,9 @@ import {
   DocumentUnderstanding
 } from './types';
 
-const API_BASE = 'http://127.0.0.1:8765';
+const API_BASE = typeof window !== 'undefined' && window.location?.origin && window.location.origin.startsWith('http')
+  ? window.location.origin
+  : 'http://127.0.0.1:8765';
 
 export const apiClient = {
   async getStatus(): Promise<SystemStatus> {

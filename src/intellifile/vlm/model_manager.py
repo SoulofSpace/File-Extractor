@@ -165,3 +165,7 @@ def get_model_manager() -> ModelManager:
     if _global_model_manager is None:
         _global_model_manager = ModelManager()
     return _global_model_manager
+
+
+# Alias for backward compatibility
+VLMModelManager = ModelManager

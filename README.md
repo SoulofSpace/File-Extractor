@@ -33,17 +33,21 @@ FILE XTRACTOR is an offline, local-first multimodal file intelligence platform a
 - Zero telemetry, zero cloud calls, zero external socket connections.
 - Cryptographic SHA-256 content deduplication and perceptual hashing (pHash).
 
-### 5. Native Desktop UI (PySide6)
-- High-performance dark-themed Qt GUI.
-- Real-time search with AI confidence badges, match evidence breakdowns, and snippet previews.
-- Saved searches, privacy-preserving search history, and background folder watcher.
+### 5. Modern Commercial AI Desktop UI (React 19 + TypeScript + Electron)
+- Next-generation desktop interface built with React 19, TypeScript, Tailwind CSS, Framer Motion, and Electron.
+- Clean desktop file dashboard featuring live library statistics across Documents, Images, Videos, Audio, Code, and Archives.
+- Deep visual file inspection with thumbnail generation, rich metadata preview drawers, OCR viewer, and AI match evidence inspection.
+- Interactive multi-select format popovers (`.pdf`, `.docx`, `.pptx`, `.xlsx`, etc.) and active chip filters.
+- Real-time indexing monitor and folder manager with native Windows folder selection.
+- Isolated legacy Qt/PySide6 desktop UI available as a seamless fallback.
 
 ---
 
 ## System Requirements
 
 - **OS:** Windows 10/11, Linux, or macOS
-- **Python:** 3.11 or 3.12
+- **Node.js:** v18+ (for Electron desktop shell)
+- **Python:** 3.11, 3.12, or 3.13
 - **RAM:** 16 GB DDR4/DDR5 recommended
 - **GPU (Optional):** NVIDIA RTX 3060 / 4060 (8 GB VRAM) for CUDA acceleration; runs on CPU via llama.cpp
 - **Tesseract OCR:** Installed locally and added to PATH (or default location `C:\Program Files\Tesseract-OCR`)
@@ -66,10 +70,23 @@ pip install -r requirements.txt
 ### 2. Launch the Application
 
 ```powershell
-$env:PYTHONPATH = "src"
+# Launch the primary modern AI desktop application (React + Electron):
 python run.py
+# Or run with web browser mode:
+python run.py --web
 ```
-*Or simply double-click `run_intellifile.bat`.*
+*Or simply double-click `run.bat` or `run_intellifile.bat`.*
+
+### 3. Launching Legacy Interface (Fallback)
+
+The original PySide6 Qt GUI is preserved as a fallback:
+```powershell
+# Launch legacy interface via CLI flag:
+python run.py --legacy
+# Or via dedicated script:
+python launch_legacy.py
+```
+*Or double-click `run_legacy.bat`.*
 
 ---
 
