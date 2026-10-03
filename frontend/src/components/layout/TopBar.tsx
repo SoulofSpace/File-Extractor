@@ -23,41 +23,41 @@ export const TopBar: React.FC<TopBarProps> = ({
   totalFiles,
   isScanning,
 }) => {
+  if (!showCompactSearch) return null;
+
   return (
-    <header className="h-16 px-6 border-b border-white/[0.06] bg-[#0b0c0e]/80 backdrop-blur-xl flex items-center justify-between gap-4 z-20 select-none">
-      {/* Center Search Input (Shown when user has navigated past Hero Home) */}
+    <header className="w-full rounded-3xl bg-gradient-to-r from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] border border-white/60 shadow-[0_12px_30px_rgba(0,0,0,0.5)] px-4 py-2 flex items-center justify-between gap-4 z-20 select-none text-black shrink-0">
+      {/* Center Search Input */}
       <div className="flex-1 max-w-2xl">
-        {showCompactSearch ? (
-          <SearchBar
-            query={query}
-            onChange={onQueryChange}
-            onSearch={onSearch}
-            isLoading={isLoading}
-            activeFilterCount={activeFilterCount}
-          />
-        ) : (
-          <div className="flex items-center gap-2 text-xs font-medium text-zinc-400 font-mono">
-            <span className="w-2 h-2 rounded-full bg-emerald-400"></span>
-            <span className="tracking-wide">DESKTOP FILE INDEX</span>
-          </div>
-        )}
+        <SearchBar
+          query={query}
+          onChange={onQueryChange}
+          onSearch={onSearch}
+          isLoading={isLoading}
+          activeFilterCount={activeFilterCount}
+          variant="island"
+          placeholder="Search what you want over here..."
+        />
       </div>
 
       {/* Right System Indicators */}
-      <div className="flex items-center gap-3 text-xs">
+      <div className="flex items-center gap-2.5 text-xs">
         {isScanning ? (
-          <div className="flex items-center gap-2 px-3 py-1.5 rounded-full bg-sky-500/10 border border-sky-500/25 text-sky-300 font-medium animate-pulse">
+          <div className="flex items-center gap-2 px-3 py-1.5 rounded-2xl bg-black text-sky-300 font-medium animate-pulse shadow-sm font-mono">
             <FolderSync className="w-3.5 h-3.5 animate-spin" />
             <span>Scanning...</span>
           </div>
         ) : (
-          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-full bg-white/[0.04] border border-white/[0.06] text-zinc-400">
+          <div className="flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-black text-white font-mono shadow-sm">
             <span className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-            <span className="font-mono">{totalFiles.toLocaleString()} files ready</span>
+            <span>{totalFiles.toLocaleString()} files</span>
           </div>
         )}
 
-        <div className="hidden sm:flex items-center gap-1.5 px-2.5 py-1.5 rounded-full bg-white/[0.03] border border-white/[0.06] text-zinc-400 text-[11px]" title="100% Offline Local Privacy">
+        <div
+          className="hidden sm:flex items-center gap-1.5 px-3 py-1.5 rounded-2xl bg-black/80 text-white text-[11px] font-medium shadow-sm"
+          title="100% Offline Local Privacy"
+        >
           <ShieldCheck className="w-3.5 h-3.5 text-emerald-400" />
           <span>Offline</span>
         </div>

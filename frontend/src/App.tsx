@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { Sidebar, NavItemKey } from './components/layout/Sidebar';
 import { TopBar } from './components/layout/TopBar';
-import { FluidWaterBackground } from './components/background/FluidWaterBackground';
+import { InteractiveGradientBackground } from './components/background/InteractiveGradientBackground';
 import { HeroSearch } from './components/home/HeroSearch';
 import { SmartFilterSummary } from './components/search/SmartFilterSummary';
 import { FileGrid } from './components/results/FileGrid';
@@ -59,8 +59,8 @@ export const App: React.FC = () => {
     failures: 0,
   });
 
-  // Settings: default animation to false for clean, non-AI native desktop appearance
-  const [animationEnabled, setAnimationEnabled] = useState(false);
+  // Settings: interactive gradient background enabled by default
+  const [animationEnabled, setAnimationEnabled] = useState(true);
 
   // Load Initial Data
   const refreshSystemData = useCallback(async () => {
@@ -294,11 +294,11 @@ export const App: React.FC = () => {
   const isHomePage = activeNav === 'home';
 
   return (
-    <div className="relative flex h-screen w-screen overflow-hidden bg-[#0a0b0e] text-[#f4f4f5]">
-      {/* 1. Fluid Water Wave Canvas Background (Home Screen) */}
-      {animationEnabled && <FluidWaterBackground interactive={isHomePage} />}
+    <div className="relative flex h-screen w-screen overflow-hidden bg-black text-[#f4f4f5] p-3 sm:p-4 gap-3 sm:gap-4 select-none">
+      {/* 1. Interactive Gradient Background with smooth mouse reaction */}
+      <InteractiveGradientBackground interactive={animationEnabled} />
 
-      {/* 2. Main Desktop Sidebar */}
+      {/* 2. Main Desktop Sidebar: 2 Floating Islands + Black Pill Buttons */}
       <Sidebar
         activeNav={activeNav}
         onSelectNav={handleSelectNav}
@@ -308,8 +308,8 @@ export const App: React.FC = () => {
       />
 
       {/* 3. Center Workspace Area */}
-      <div className="relative flex-1 flex flex-col h-full min-w-0 z-10 overflow-hidden">
-        {/* Top Bar Header */}
+      <div className="relative flex-1 flex flex-col h-full min-w-0 z-10 overflow-hidden gap-3">
+        {/* Top Floating Island Header (Shown when user has navigated past Hero Home) */}
         <TopBar
           showCompactSearch={!isHomePage}
           query={searchQuery}
@@ -322,7 +322,7 @@ export const App: React.FC = () => {
         />
 
         {/* Dynamic Center Content View */}
-        <main className="flex-1 overflow-y-auto px-6 py-4 space-y-6">
+        <main className="flex-1 overflow-y-auto px-1 py-1 flex flex-col min-h-0">
           {/* HOME SCREEN LANDING */}
           {isHomePage && (
             <HeroSearch
@@ -345,8 +345,8 @@ export const App: React.FC = () => {
 
           {/* SEARCH RESULTS VIEW */}
           {(activeNav === 'all' ||
-            ['images', 'documents', 'videos', 'audio', 'code', 'archives'].includes(activeNav)) && (
-              <div className="space-y-4 max-w-6xl mx-auto">
+            ['images', 'documents', 'videos', 'audio', 'code', 'archives'].includes(activeNav)) && !isHomePage && (
+              <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col gap-5 text-black overflow-y-auto">
                 {/* Smart Filter Summary */}
                 <SmartFilterSummary
                   query={submittedQuery}
@@ -369,8 +369,8 @@ export const App: React.FC = () => {
                 {/* Results Section */}
                 <ErrorBoundary fallbackTitle="Results Rendering Error" onReset={handleClearAllFilters}>
                   {isSearching ? (
-                    <div className="flex flex-col items-center justify-center p-24 text-center space-y-3">
-                      <Loader2 className="w-8 h-8 animate-spin text-sky-400" />
+                    <div className="flex flex-col items-center justify-center p-24 text-center space-y-3 rounded-2xl bg-[#090a0f] text-white border border-white/10 shadow-lg">
+                      <Loader2 className="w-8 h-8 animate-spin text-white" />
                       <span className="text-sm font-medium text-zinc-300">Searching your files with local AI...</span>
                     </div>
                   ) : results.length > 0 ? (
@@ -390,8 +390,8 @@ export const App: React.FC = () => {
                       />
                     )
                   ) : (
-                    <div className="flex flex-col items-center justify-center p-20 text-center space-y-3 rounded-2xl bg-white/[0.02] border border-white/[0.05]">
-                      <FileQuestion className="w-10 h-10 text-zinc-500" />
+                    <div className="flex flex-col items-center justify-center p-20 text-center space-y-3 rounded-2xl bg-[#090a0f] text-white border border-white/10 shadow-lg">
+                      <FileQuestion className="w-10 h-10 text-zinc-400" />
                       <h3 className="text-base font-semibold text-white">No files matched those filters</h3>
                       <p className="text-xs text-zinc-400 max-w-sm">
                         Try broadening your search query or clearing active format extensions.
@@ -399,7 +399,7 @@ export const App: React.FC = () => {
                       <button
                         type="button"
                         onClick={handleClearAllFilters}
-                        className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors mt-2"
+                        className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors mt-2 shadow-md"
                       >
                         Clear all filters
                       </button>
@@ -411,48 +411,64 @@ export const App: React.FC = () => {
 
           {/* FOLDERS / INDEXING VIEW */}
           {activeNav === 'indexing' && (
-            <FolderManager
-              folders={folders}
-              indexingStatus={indexingStatus}
-              onAddFolder={handleAddFolder}
-              onRemoveFolder={handleRemoveFolder}
-              onRescanFolder={handleRescanFolder}
-            />
+            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
+              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
+                <FolderManager
+                  folders={folders}
+                  indexingStatus={indexingStatus}
+                  onAddFolder={handleAddFolder}
+                  onRemoveFolder={handleRemoveFolder}
+                  onRescanFolder={handleRescanFolder}
+                />
+              </div>
+            </div>
           )}
 
           {/* RECENT SEARCHES VIEW */}
           {activeNav === 'recent_searches' && (
-            <SearchHistoryView
-              history={history}
-              onSelectQuery={(q) => {
-                setSearchQuery(q);
-                handleExecuteSearch(q);
-              }}
-              onClearHistory={handleClearHistory}
-            />
+            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
+              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
+                <SearchHistoryView
+                  history={history}
+                  onSelectQuery={(q) => {
+                    setSearchQuery(q);
+                    handleExecuteSearch(q);
+                  }}
+                  onClearHistory={handleClearHistory}
+                />
+              </div>
+            </div>
           )}
 
           {/* SAVED SEARCHES VIEW */}
           {activeNav === 'saved_searches' && (
-            <SavedSearchesView
-              savedSearches={savedSearches}
-              onSelectQuery={(q) => {
-                setSearchQuery(q);
-                handleExecuteSearch(q);
-              }}
-              onDeleteSavedSearch={handleDeleteSavedSearch}
-            />
+            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
+              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
+                <SavedSearchesView
+                  savedSearches={savedSearches}
+                  onSelectQuery={(q) => {
+                    setSearchQuery(q);
+                    handleExecuteSearch(q);
+                  }}
+                  onDeleteSavedSearch={handleDeleteSavedSearch}
+                />
+              </div>
+            </div>
           )}
 
           {/* SETTINGS VIEW */}
           {activeNav === 'settings' && (
-            <SettingsDialog
-              systemStatus={systemStatus}
-              animationEnabled={animationEnabled}
-              onToggleAnimation={() => setAnimationEnabled((prev) => !prev)}
-              defaultViewMode={viewMode}
-              onChangeDefaultView={setViewMode}
-            />
+            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
+              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
+                <SettingsDialog
+                  systemStatus={systemStatus}
+                  animationEnabled={animationEnabled}
+                  onToggleAnimation={() => setAnimationEnabled((prev) => !prev)}
+                  defaultViewMode={viewMode}
+                  onChangeDefaultView={setViewMode}
+                />
+              </div>
+            </div>
           )}
         </main>
       </div>

@@ -14,7 +14,6 @@ import {
   Settings,
   ChevronLeft,
   ChevronRight,
-  HardDrive
 } from 'lucide-react';
 
 export type NavItemKey =
@@ -67,6 +66,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     { key: 'settings', label: 'Settings', icon: Settings },
   ];
 
+  // Button style matching "Button style ref" from reference image
   const renderNavButton = (item: { key: string; label: string; icon: any }) => {
     const Icon = item.icon;
     const isActive = activeNav === item.key;
@@ -77,17 +77,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
         type="button"
         onClick={() => onSelectNav(item.key as NavItemKey)}
         title={isCollapsed ? item.label : undefined}
-        className={`w-full flex items-center gap-3 px-3 py-2.5 rounded-xl text-xs font-medium transition-all duration-150 select-none group relative ${
+        className={`w-full flex items-center gap-3 px-3.5 py-2.5 rounded-2xl text-xs transition-all duration-150 select-none group relative ${
           isActive
-            ? 'bg-white/10 text-white font-semibold shadow-sm border border-white/10'
-            : 'text-zinc-400 hover:text-white hover:bg-white/[0.04]'
-        }`}
+            ? 'bg-black text-white font-semibold shadow-lg ring-1 ring-black/40 scale-[1.02]'
+            : 'bg-black/10 hover:bg-black text-zinc-900 hover:text-white font-medium hover:shadow-md'
+        } ${isCollapsed ? 'justify-center px-0' : ''}`}
       >
-        {/* Active Pill Indicator */}
-        {isActive && (
-          <span className="absolute left-0 top-1.5 bottom-1.5 w-1 rounded-r-full bg-sky-400 shadow-[0_0_8px_rgba(56,189,248,0.6)]" />
-        )}
-        <Icon className={`w-4 h-4 shrink-0 transition-transform duration-150 group-hover:scale-110 ${isActive ? 'text-sky-300' : 'text-zinc-400 group-hover:text-white'}`} />
+        <Icon
+          className={`w-4 h-4 shrink-0 transition-transform duration-150 group-hover:scale-110 ${
+            isActive ? 'text-white' : 'text-zinc-800 group-hover:text-white'
+          }`}
+        />
         {!isCollapsed && <span className="truncate">{item.label}</span>}
       </button>
     );
@@ -95,94 +95,88 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   return (
     <aside
-      className={`h-full flex flex-col justify-between bg-[#0e1014]/90 border-r border-white/[0.08] backdrop-blur-xl z-30 transition-all duration-200 select-none ${
-        isCollapsed ? 'w-16' : 'w-60'
+      className={`h-full flex flex-col gap-3 select-none z-30 transition-all duration-200 ${
+        isCollapsed ? 'w-20' : 'w-60'
       }`}
     >
-      {/* Top Branding & Collapse Control */}
-      <div>
-        <div className="flex items-center justify-between px-4 py-4 border-b border-white/[0.06]">
-          {!isCollapsed && (
-            <div className="flex items-center gap-2">
-              <div className="w-6 h-6 rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white font-black text-xs shadow-md">
-                X
-              </div>
-              <span className="font-extrabold tracking-wider text-xs text-white uppercase">
-                FILE XTRACTOR
-              </span>
-            </div>
-          )}
-
-          {isCollapsed && (
-            <div className="w-8 h-8 mx-auto rounded-lg bg-gradient-to-tr from-sky-500 to-indigo-600 flex items-center justify-center text-white font-black text-sm shadow-md">
+      {/* 1. Top Island: Brand / Logo Card (Direct from Reference Image) */}
+      <div className="w-full rounded-3xl bg-gradient-to-r from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] p-3.5 shadow-[0_12px_30px_rgba(0,0,0,0.5)] border border-white/60 flex items-center justify-between shrink-0">
+        {!isCollapsed ? (
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-7 h-7 rounded-full bg-black flex items-center justify-center text-white font-black text-xs shadow-md shrink-0">
               X
             </div>
-          )}
-
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className={`p-1.5 rounded-lg text-zinc-400 hover:text-white hover:bg-white/10 transition-colors ${
-              isCollapsed ? 'hidden' : 'block'
-            }`}
-            title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
-          >
-            <ChevronLeft className="w-4 h-4" />
-          </button>
-        </div>
-
-        {/* Navigation Groups */}
-        <div className="p-3 space-y-5 overflow-y-auto max-h-[calc(100vh-140px)]">
-          {/* Main items */}
-          <div className="space-y-1">
-            {mainNav.map(renderNavButton)}
+            <span className="font-extrabold tracking-wider text-xs text-black uppercase truncate">
+              FILE XTRACTOR
+            </span>
           </div>
+        ) : (
+          <div className="w-8 h-8 mx-auto rounded-full bg-black flex items-center justify-center text-white font-black text-xs shadow-md">
+            X
+          </div>
+        )}
 
-          {/* Categories */}
+        <button
+          type="button"
+          onClick={onToggleCollapse}
+          className={`p-1.5 rounded-full bg-black/10 hover:bg-black text-black hover:text-white transition-colors ${
+            isCollapsed ? 'hidden' : 'block'
+          }`}
+          title={isCollapsed ? 'Expand Sidebar' : 'Collapse Sidebar'}
+        >
+          <ChevronLeft className="w-4 h-4" />
+        </button>
+      </div>
+
+      {/* 2. Main Sidebar Island: Navigation Card (Direct from Reference Image) */}
+      <div className="flex-1 w-full rounded-3xl bg-gradient-to-b from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] p-3 shadow-[0_16px_40px_rgba(0,0,0,0.55)] border border-white/60 flex flex-col justify-between overflow-hidden">
+        {/* Navigation Items Scroll Area */}
+        <div className="space-y-4 overflow-y-auto pr-0.5">
+          {/* Main Group */}
+          <div className="space-y-1.5">{mainNav.map(renderNavButton)}</div>
+
+          {/* Library Group */}
           <div>
             {!isCollapsed && (
-              <span className="px-3 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block mb-1">
+              <span className="px-3 text-[10px] font-bold text-zinc-700 uppercase tracking-wider block mb-1.5 font-mono">
                 Library
               </span>
             )}
-            <div className="space-y-0.5">
-              {categoryNav.map(renderNavButton)}
-            </div>
+            <div className="space-y-1">{categoryNav.map(renderNavButton)}</div>
           </div>
 
-          {/* Tools & System */}
+          {/* System Group */}
           <div>
             {!isCollapsed && (
-              <span className="px-3 text-[10px] font-semibold text-zinc-500 uppercase tracking-wider block mb-1">
+              <span className="px-3 text-[10px] font-bold text-zinc-700 uppercase tracking-wider block mb-1.5 font-mono">
                 System
               </span>
             )}
-            <div className="space-y-0.5">
-              {toolsNav.map(renderNavButton)}
-            </div>
+            <div className="space-y-1">{toolsNav.map(renderNavButton)}</div>
           </div>
         </div>
-      </div>
 
-      {/* Bottom Summary Bar */}
-      <div className="p-3 border-t border-white/[0.06] bg-white/[0.01]">
-        {isCollapsed ? (
-          <button
-            type="button"
-            onClick={onToggleCollapse}
-            className="w-full flex justify-center p-2 rounded-xl text-zinc-400 hover:text-white hover:bg-white/10 transition-colors"
-            title="Expand Sidebar"
-          >
-            <ChevronRight className="w-4 h-4" />
-          </button>
-        ) : (
-          <div className="flex items-center justify-between px-2 py-1.5 text-xs text-zinc-400">
-            <div className="flex items-center gap-2">
-              <HardDrive className="w-3.5 h-3.5 text-sky-400" />
-              <span>{totalIndexedFiles.toLocaleString()} files indexed</span>
+        {/* Bottom Island Status / Expand Button */}
+        <div className="pt-2 border-t border-black/10 shrink-0">
+          {isCollapsed ? (
+            <button
+              type="button"
+              onClick={onToggleCollapse}
+              className="w-full flex justify-center p-2 rounded-2xl bg-black text-white hover:bg-zinc-800 transition-colors shadow-sm"
+              title="Expand Sidebar"
+            >
+              <ChevronRight className="w-4 h-4" />
+            </button>
+          ) : (
+            <div className="flex items-center justify-between px-3 py-2 rounded-2xl bg-black text-white text-xs font-mono shadow-md">
+              <div className="flex items-center gap-2">
+                <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse" />
+                <span className="text-[11px] font-medium">Ready</span>
+              </div>
+              <span className="text-[10px] text-zinc-400">{totalIndexedFiles} files</span>
             </div>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </aside>
   );
