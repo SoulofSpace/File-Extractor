@@ -25,6 +25,7 @@ runtime-test-fixtures/
 *.tmp
 .cache/
 scratch/
+electron_*.png
 
 # Large Model Weights (Downloaded via huggingface / local GGUF)
 models/*.gguf

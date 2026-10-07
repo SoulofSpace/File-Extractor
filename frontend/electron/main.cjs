@@ -64,7 +64,7 @@ function createWindow() {
     minWidth: 1080,
     minHeight: 700,
     backgroundColor: '#0a0b0e',
-    title: 'FILE XTRACTOR',
+    title: 'i-file',
     autoHideMenuBar: true,
     webPreferences: {
       preload: path.join(__dirname, 'preload.cjs'),
@@ -73,6 +73,9 @@ function createWindow() {
       sandbox: true,
     },
   });
+
+  // Clear HTTP/session cache on startup to ensure latest build loads immediately
+  mainWindow.webContents.session.clearCache();
 
   // In production or when server is mounted, load API_URL
   mainWindow.loadURL(API_URL);
@@ -83,8 +86,12 @@ function createWindow() {
     console.log(`[Renderer ${levels[level] || level}] ${message} (${sourceId}:${line})`);
   });
 
-  // Enable F12 and Ctrl+Shift+I to toggle DevTools
+  // Enable F5 / Ctrl+R reload, and F12 / Ctrl+Shift+I DevTools
   mainWindow.webContents.on('before-input-event', (event, input) => {
+    if (input.key === 'F5' || (input.control && input.key.toLowerCase() === 'r')) {
+      mainWindow.reload();
+      event.preventDefault();
+    }
     if (input.key === 'F12' || (input.control && input.shift && input.key.toLowerCase() === 'i')) {
       mainWindow.webContents.toggleDevTools();
       event.preventDefault();
@@ -97,6 +104,52 @@ function createWindow() {
     setTimeout(() => {
       if (mainWindow) mainWindow.loadURL(API_URL);
     }, 1500);
+  });
+
+  // Automated visual verification snapshot
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (process.argv.includes('--screenshot')) {
+      setTimeout(async () => {
+        try {
+          const image = await mainWindow.webContents.capturePage();
+          const fs = require('fs');
+          const outPath = path.resolve(__dirname, '../../electron_screenshot.png');
+          fs.writeFileSync(outPath, image.toPNG());
+          console.log('[Electron] Screenshot successfully saved to:', outPath);
+        } catch (e) {
+          console.error('[Electron] Screenshot failed:', e);
+        }
+      }, 3500);
+    }
+
+    if (process.argv.includes('--test-preview')) {
+      setTimeout(async () => {
+        try {
+          await mainWindow.webContents.executeJavaScript(`
+            (() => {
+              const card = document.querySelector('.file-card');
+              if (card) {
+                card.click();
+                console.log('[Electron Test] Card clicked successfully');
+              } else {
+                console.warn('[Electron Test] No .file-card found');
+              }
+            })()
+          `);
+
+          // Wait 1 second for slide-in drawer
+          setTimeout(async () => {
+            const image = await mainWindow.webContents.capturePage();
+            const fs = require('fs');
+            const outPath = path.resolve(__dirname, '../../electron_preview_screenshot.png');
+            fs.writeFileSync(outPath, image.toPNG());
+            console.log('[Electron] Preview screenshot saved to:', outPath);
+          }, 1000);
+        } catch (e) {
+          console.error('[Electron] Test preview failed:', e);
+        }
+      }, 3500);
+    }
   });
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {

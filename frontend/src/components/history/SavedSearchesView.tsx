@@ -48,7 +48,7 @@ export const SavedSearchesView: React.FC<SavedSearchesViewProps> = ({
               <button
                 type="button"
                 onClick={() => onSelectQuery(item.query)}
-                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white text-zinc-300 hover:text-black font-semibold text-xs transition-colors"
+                className="flex items-center gap-1 px-3 py-1.5 rounded-xl bg-white/[0.08] hover:bg-white text-zinc-200 hover:text-zinc-950 font-bold text-xs transition-colors"
               >
                 <span>Run</span>
                 <ArrowRight className="w-3 h-3" />

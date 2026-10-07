@@ -1,10 +1,10 @@
 @echo off
-title FILE XTRACTOR — Modern AI Desktop
+title i-file — Modern AI Desktop
 cd /d "%~dp0"
 set "PATH=C:\Program Files\nodejs;%PATH%"
 
 echo ===================================================
-echo   Starting FILE XTRACTOR Premium AI Desktop App
+echo   Starting i-file Premium AI Desktop App
 echo ===================================================
 
 if exist ".venv\Scripts\python.exe" (

@@ -551,6 +551,17 @@ def open_local_file(req: OpenFileRequest):
 from fastapi.staticfiles import StaticFiles
 
 _frontend_dist = Path(__file__).resolve().parent.parent.parent.parent / "frontend" / "dist"
+
+@app.get("/")
+def serve_index():
+    index_file = _frontend_dist / "index.html"
+    if index_file.exists():
+        return FileResponse(
+            str(index_file),
+            headers={"Cache-Control": "no-cache, no-store, must-revalidate"},
+        )
+    return {"message": "i-file Core API running"}
+
 if _frontend_dist.exists():
     app.mount("/", StaticFiles(directory=str(_frontend_dist), html=True), name="frontend")
 

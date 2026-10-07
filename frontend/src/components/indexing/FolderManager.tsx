@@ -115,7 +115,8 @@ export const FolderManager: React.FC<FolderManagerProps> = ({
           />
           <button
             type="submit"
-            className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors shrink-0"
+            className="btn-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-colors shrink-0 shadow-sm"
+            style={{ color: '#09090b', backgroundColor: '#ffffff' }}
           >
             Add Folder
           </button>

@@ -1,10 +1,10 @@
 @echo off
-title FILE XTRACTOR — Web Mode
+title i-file — Web Mode
 cd /d "%~dp0"
 set "PATH=C:\Program Files\nodejs;%PATH%"
 
 echo ===================================================
-echo   Starting FILE XTRACTOR in Web Browser Mode
+echo   Starting i-file in Web Browser Mode
 echo ===================================================
 
 if exist ".venv\Scripts\python.exe" (

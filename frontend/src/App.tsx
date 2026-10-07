@@ -1,16 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { Sidebar, NavItemKey } from './components/layout/Sidebar';
-import { TopBar } from './components/layout/TopBar';
-import { InteractiveGradientBackground } from './components/background/InteractiveGradientBackground';
-import { HeroSearch } from './components/home/HeroSearch';
-import { SmartFilterSummary } from './components/search/SmartFilterSummary';
-import { FileGrid } from './components/results/FileGrid';
-import { FileList } from './components/results/FileList';
-import { PreviewDrawer } from './components/preview/PreviewDrawer';
-import { FolderManager } from './components/indexing/FolderManager';
-import { SearchHistoryView } from './components/history/SearchHistoryView';
-import { SavedSearchesView } from './components/history/SavedSearchesView';
-import { SettingsDialog } from './components/settings/SettingsDialog';
+import React, { useState, useEffect, useRef, useMemo, useCallback } from 'react';
+import { FigmaIcon, FigmaIconName } from './components/common/FigmaIcon';
+import { CATEGORIES_CONFIG } from './config/categories';
 import { apiClient } from './api/client';
 import {
   SearchResultItem,
@@ -18,38 +8,52 @@ import {
   FolderItem,
   SearchHistoryItem,
   SavedSearchItem,
-  IndexingStatus
+  IndexingStatus,
 } from './api/types';
-import { Loader2, FileQuestion } from 'lucide-react';
+import { PreviewDrawer } from './components/preview/PreviewDrawer';
+import { FolderManager } from './components/indexing/FolderManager';
+import { SearchHistoryView } from './components/history/SearchHistoryView';
+import { SavedSearchesView } from './components/history/SavedSearchesView';
+import { SettingsDialog } from './components/settings/SettingsDialog';
+import { CursorTrailOverlay } from './components/common/CursorTrailOverlay';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
+type ViewMode = 'files' | 'gallery' | 'analysis' | 'folders' | 'history';
+
 export const App: React.FC = () => {
-  // Navigation State
-  const [activeNav, setActiveNav] = useState<NavItemKey>('home');
-  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  // DOM & Animation Refs
+  const shellRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const target = useRef({ x: 0.62, y: 0.3 });
+  const current = useRef({ x: 0.62, y: 0.3 });
+  const raf = useRef(0);
 
-  // Search State
-  const [searchQuery, setSearchQuery] = useState('');
-  const [submittedQuery, setSubmittedQuery] = useState('');
-  const [currentCategory, setCurrentCategory] = useState<string>('ALL');
-  const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
-  const [sortBy, setSortBy] = useState<'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name'>('relevance');
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
-
-  // Results & UI State
-  const [results, setResults] = useState<SearchResultItem[]>([]);
-  const [totalResults, setTotalResults] = useState(0);
-  const [elapsedMs, setElapsedMs] = useState(0);
-  const [isSearching, setIsSearching] = useState(false);
-  const [isVisualQuery, setIsVisualQuery] = useState(false);
+  // App Navigation & UI Views
+  const [view, setView] = useState<ViewMode>('files');
+  const [compact, setCompact] = useState(false);
   const [selectedFile, setSelectedFile] = useState<SearchResultItem | null>(null);
+  const [notice, setNotice] = useState('');
+  const [showSettingsModal, setShowSettingsModal] = useState(false);
+  const [showAddFolderModal, setShowAddFolderModal] = useState(false);
+  const [historyTab, setHistoryTab] = useState<'history' | 'saved'>('history');
 
-  // Data & Background System States
-  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
+  // Search & Filter State
+  const [searchQuery, setSearchQuery] = useState('');
+  const [activeCategory, setActiveCategory] = useState('ALL');
+  const [selectedFormats, setSelectedFormats] = useState<string[]>([]);
+  const [smartMode, setSmartMode] = useState(false);
+  const [sortOption, setSortOption] = useState<'relevance' | 'az' | 'za' | 'date' | 'size'>('relevance');
+  const [isSearching, setIsSearching] = useState(false);
+  const [searchElapsedMs, setSearchElapsedMs] = useState(0);
+
+  // Data States
+  const [searchResults, setSearchResults] = useState<SearchResultItem[]>([]);
+  const [hasSearched, setHasSearched] = useState(false);
+  const [recentFiles, setRecentFiles] = useState<SearchResultItem[]>([]);
   const [folders, setFolders] = useState<FolderItem[]>([]);
+  const [systemStatus, setSystemStatus] = useState<SystemStatus | null>(null);
   const [history, setHistory] = useState<SearchHistoryItem[]>([]);
   const [savedSearches, setSavedSearches] = useState<SavedSearchItem[]>([]);
-  const [recentFiles, setRecentFiles] = useState<SearchResultItem[]>([]);
   const [indexingStatus, setIndexingStatus] = useState<IndexingStatus>({
     is_scanning: false,
     current_folder: '',
@@ -59,35 +63,68 @@ export const App: React.FC = () => {
     failures: 0,
   });
 
-  // Settings: interactive gradient background enabled by default
+  // Settings
   const [animationEnabled, setAnimationEnabled] = useState(true);
+  const [cursorTrailEnabled, setCursorTrailEnabled] = useState(true);
 
-  // Load Initial Data
-  const refreshSystemData = useCallback(async () => {
-    try {
-      const [status, folderList, hist, saved, recent] = await Promise.all([
-        apiClient.getStatus(),
-        apiClient.getFolders(),
-        apiClient.getSearchHistory(40),
-        apiClient.getSavedSearches(),
-        apiClient.getRecentFiles(12),
-      ]);
-      setSystemStatus(status);
-      setFolders(folderList);
-      setHistory(hist);
-      setSavedSearches(saved);
-      setRecentFiles(recent || []);
-      if (status.indexing) {
-        setIndexingStatus(status.indexing);
+  // 1. Mouse physics loop for interactive gradient background
+  useEffect(() => {
+    if (!animationEnabled) return;
+
+    const onPointerMove = (event: PointerEvent) => {
+      target.current = {
+        x: event.clientX / window.innerWidth,
+        y: event.clientY / window.innerHeight,
+      };
+    };
+    window.addEventListener('pointermove', onPointerMove);
+
+    const tick = () => {
+      current.current.x += (target.current.x - current.current.x) * 0.045;
+      current.current.y += (target.current.y - current.current.y) * 0.045;
+      const element = shellRef.current;
+      if (element) {
+        element.style.setProperty('--mouse-x', `${current.current.x * 100}%`);
+        element.style.setProperty('--mouse-y', `${current.current.y * 100}%`);
+        element.style.setProperty('--shift-x', `${(1 - current.current.x) * 100}%`);
       }
-    } catch (err) {
-      console.error('Failed to load system data from backend:', err);
-    }
+      raf.current = requestAnimationFrame(tick);
+    };
+    raf.current = requestAnimationFrame(tick);
+
+    return () => {
+      window.removeEventListener('pointermove', onPointerMove);
+      cancelAnimationFrame(raf.current);
+    };
+  }, [animationEnabled]);
+
+  // 2. Auto-dismiss Toast
+  useEffect(() => {
+    if (!notice) return;
+    const timeout = window.setTimeout(() => setNotice(''), 2400);
+    return () => clearTimeout(timeout);
+  }, [notice]);
+
+  // 3. Load Initial System & Backend Data
+  const refreshSystemData = useCallback(async () => {
+    // Fetch instant metadata immediately (takes ~15ms)
+    apiClient.getRecentFiles(40).then((r) => setRecentFiles(r || [])).catch(() => {});
+    apiClient.getFolders().then((f) => setFolders(f || [])).catch(() => {});
+    apiClient.getSearchHistory(40).then((h) => setHistory(h || [])).catch(() => {});
+    apiClient.getSavedSearches().then((s) => setSavedSearches(s || [])).catch(() => {});
+
+    // Fetch heavier AI neural engine status concurrently
+    apiClient.getStatus().then((st) => {
+      setSystemStatus(st);
+      if (st.indexing) setIndexingStatus(st.indexing);
+    }).catch((err) => {
+      console.warn('Backend status warning:', err);
+    });
   }, []);
 
   useEffect(() => {
     refreshSystemData();
-    // Poll indexing status every 3 seconds
+    // Poll indexing status periodically
     const interval = setInterval(async () => {
       try {
         const idx = await apiClient.getIndexingStatus();
@@ -97,392 +134,1048 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [refreshSystemData]);
 
-  // Execute Search
-  const handleExecuteSearch = useCallback(
-    async (
-      queryToSearch: string,
-      category = currentCategory,
-      formats = selectedFormats,
-      sort = sortBy,
-      targetNav?: NavItemKey
-    ) => {
-      const q = queryToSearch.trim();
-      if (!q) return;
+  // 4. Keyboard Shortcuts (⌘ N / Ctrl+N for new extraction)
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'n') {
+        e.preventDefault();
+        setShowAddFolderModal(true);
+      }
+      if (e.key === 'Escape') {
+        if (selectedFile) setSelectedFile(null);
+        if (showSettingsModal) setShowSettingsModal(false);
+        if (showAddFolderModal) setShowAddFolderModal(false);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [selectedFile, showSettingsModal, showAddFolderModal]);
 
-      setIsSearching(true);
-      setSubmittedQuery(q);
-
-      if (targetNav) {
-        setActiveNav(targetNav);
-      } else if (category && category !== 'ALL') {
-        const navMap: Record<string, NavItemKey> = {
-          IMAGE: 'images',
-          DOCUMENT: 'documents',
-          VIDEO: 'videos',
-          AUDIO: 'audio',
-          CODE: 'code',
-          ARCHIVE: 'archives',
-        };
-        setActiveNav(navMap[category.toUpperCase()] || 'all');
-      } else {
-        setActiveNav('all');
+  // 5. Execute Backend Search
+  const executeSearch = useCallback(
+    async (queryText: string, category = activeCategory, formats = selectedFormats) => {
+      const trimmed = queryText.trim();
+      if (!trimmed) {
+        setHasSearched(false);
+        setSearchResults([]);
+        return;
       }
 
+      setIsSearching(true);
+      const startTime = performance.now();
       try {
-        const response = await apiClient.search({
-          query: q,
-          category,
-          formats,
-          sort_by: sort,
-          limit: 100,
-          save_history: q !== '*',
+        const resp = await apiClient.search({
+          query: trimmed,
+          category: category === 'ALL' ? undefined : category,
+          formats: formats.length > 0 ? formats : undefined,
+          limit: 60,
+          save_history: true,
         });
 
-        const rawList = Array.isArray(response?.results) ? response.results : [];
-        const safeResults: SearchResultItem[] = rawList.map((r: any) => ({
-          ...r,
-          file_id: r.file_id || r.id || 0,
-          filename: r.filename || 'Untitled',
-          extension: (r.extension || '').toLowerCase(),
-          category: r.category || r.file_type || 'File',
-          size_bytes: Number(r.size_bytes || 0),
-          relevance_score: Number(r.relevance_score || 0),
-          match_evidence: r.match_evidence || {},
-        }));
+        setSearchResults(resp.results || []);
+        setHasSearched(true);
+        setSearchElapsedMs(Math.round(performance.now() - startTime));
 
-        setResults(safeResults);
-        setTotalResults(Number(response?.total_results || safeResults.length));
-        setElapsedMs(Number(response?.elapsed_ms || 0));
-        setIsVisualQuery(Boolean(response?.query_plan?.is_visual));
-
-        // Preserve selected file if present in new results
-        if (selectedFile) {
-          const match = safeResults.find((r) => r.file_id === selectedFile.file_id);
-          setSelectedFile(match || null);
-        }
+        // Refresh search history in background
+        apiClient.getSearchHistory(30).then(setHistory).catch(() => {});
       } catch (err) {
-        console.error('Search request failed:', err);
-        setResults([]);
-        setTotalResults(0);
+        console.error('Search failed:', err);
+        setNotice('Search error. Verify backend status.');
       } finally {
         setIsSearching(false);
       }
     },
-    [currentCategory, selectedFormats, sortBy, selectedFile]
+    [activeCategory, selectedFormats]
   );
 
-  // Category change handler
-  const handleCategorySelect = (catId: string) => {
-    setCurrentCategory(catId);
-    const q = submittedQuery || '*';
-    handleExecuteSearch(q, catId, selectedFormats, sortBy);
+  const handleSearchSubmit = (e?: React.FormEvent) => {
+    if (e) e.preventDefault();
+    if (view !== 'files' && view !== 'gallery') {
+      setView('files');
+    }
+    executeSearch(searchQuery);
   };
 
-  // Format toggle handler
-  const handleToggleFormat = (ext: string) => {
-    const nextFormats = selectedFormats.includes(ext)
-      ? selectedFormats.filter((f) => f !== ext)
-      : [...selectedFormats, ext];
-    setSelectedFormats(nextFormats);
-    const q = submittedQuery || '*';
-    handleExecuteSearch(q, currentCategory, nextFormats, sortBy);
+  const handleClearSearch = () => {
+    setSearchQuery('');
+    setHasSearched(false);
+    setSearchResults([]);
   };
 
-  const handleSelectAllFormats = (exts: string[]) => {
-    const combined = Array.from(new Set([...selectedFormats, ...exts]));
-    setSelectedFormats(combined);
-    const q = submittedQuery || '*';
-    handleExecuteSearch(q, currentCategory, combined, sortBy);
-  };
-
-  const handleClearCategoryFormats = (exts: string[]) => {
-    const filtered = selectedFormats.filter((f) => !exts.includes(f));
-    setSelectedFormats(filtered);
-    const q = submittedQuery || '*';
-    handleExecuteSearch(q, currentCategory, filtered, sortBy);
-  };
-
-  const handleClearAllFilters = () => {
-    setCurrentCategory('ALL');
+  // 6. Category & Format Filter Handlers
+  const handleSelectCategory = (catId: string) => {
+    setActiveCategory(catId);
     setSelectedFormats([]);
-    const q = submittedQuery || '*';
-    handleExecuteSearch(q, 'ALL', [], sortBy);
-  };
-
-  const handleSortChange = (
-    newSort: 'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name'
-  ) => {
-    setSortBy(newSort);
-    const q = submittedQuery || '*';
-    handleExecuteSearch(q, currentCategory, selectedFormats, newSort);
-  };
-
-  // Open File
-  const handleOpenFile = async (path: string, reveal = false) => {
-    try {
-      await apiClient.openFile(path, reveal);
-    } catch (err) {
-      console.error('Failed to open file:', err);
+    if (hasSearched && searchQuery.trim()) {
+      executeSearch(searchQuery, catId, []);
     }
   };
 
-  // Sidebar navigation selection
-  const handleSelectNav = (key: NavItemKey) => {
-    setActiveNav(key);
-    setSelectedFile(null);
+  const toggleFormat = (fmt: string) => {
+    const nextFormats = selectedFormats.includes(fmt)
+      ? selectedFormats.filter((f) => f !== fmt)
+      : [...selectedFormats, fmt];
+    setSelectedFormats(nextFormats);
+    if (hasSearched && searchQuery.trim()) {
+      executeSearch(searchQuery, activeCategory, nextFormats);
+    }
+  };
 
-    if (key === 'home') {
-      setSearchQuery('');
-      setSubmittedQuery('');
-      setCurrentCategory('ALL');
-      setSelectedFormats([]);
-      refreshSystemData();
-      return;
+  // 7. Determine active file list based on view & search
+  const visibleFiles = useMemo(() => {
+    let list = hasSearched ? [...searchResults] : [...recentFiles];
+
+    // Filter by Gallery view (images only)
+    if (view === 'gallery') {
+      list = list.filter((f) => {
+        const ext = (f.extension || '').toLowerCase();
+        return (
+          f.category === 'IMAGE' ||
+          ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg'].includes(ext)
+        );
+      });
     }
 
-    // If selecting a category from the sidebar (Images, Documents, Videos, etc.)
-    const categoryMapping: Partial<Record<NavItemKey, string>> = {
-      images: 'IMAGE',
-      documents: 'DOCUMENT',
-      videos: 'VIDEO',
-      audio: 'AUDIO',
-      code: 'CODE',
-      archives: 'ARCHIVE',
-      all: 'ALL',
-    };
+    // Filter by Category if not in search or not ALL
+    if (!hasSearched && activeCategory !== 'ALL') {
+      list = list.filter((f) => f.category?.toUpperCase() === activeCategory.toUpperCase());
+    }
 
-    if (categoryMapping[key]) {
-      const cat = categoryMapping[key]!;
-      setCurrentCategory(cat);
-      if (submittedQuery && submittedQuery !== '*') {
-        handleExecuteSearch(submittedQuery, cat, selectedFormats, sortBy, key);
-      } else {
-        // Run broad category browse
-        handleExecuteSearch('*', cat, [], sortBy, key);
+    // Filter by Formats
+    if (selectedFormats.length > 0) {
+      list = list.filter((f) => {
+        const ext = (f.extension || '').toLowerCase().replace('.', '');
+        return selectedFormats.map((sf) => sf.toLowerCase()).includes(ext);
+      });
+    }
+
+    // Sort files
+    list.sort((a, b) => {
+      if (sortOption === 'az') return a.filename.localeCompare(b.filename);
+      if (sortOption === 'za') return b.filename.localeCompare(a.filename);
+      if (sortOption === 'size') return (b.size_bytes || 0) - (a.size_bytes || 0);
+      if (sortOption === 'date') {
+        const da = new Date(a.modified_at || a.created_at || 0).getTime();
+        const db = new Date(b.modified_at || b.created_at || 0).getTime();
+        return db - da;
       }
+      // default: relevance if searching, else date
+      if (hasSearched) return (b.relevance_score || 0) - (a.relevance_score || 0);
+      return a.filename.localeCompare(b.filename);
+    });
+
+    return list;
+  }, [hasSearched, searchResults, recentFiles, view, activeCategory, selectedFormats, sortOption]);
+
+  // Helpers
+  const formatBytes = (bytes?: number) => {
+    if (!bytes || bytes <= 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + (sizes[i] || 'B');
+  };
+
+  const formatRelativeTime = (val?: string | number) => {
+    if (!val) return 'Recently';
+    try {
+      const d = new Date(val);
+      if (isNaN(d.getTime())) return 'Recently';
+      const diffMs = Date.now() - d.getTime();
+      const diffMin = Math.round(diffMs / 60000);
+      if (diffMin < 1) return 'Just now';
+      if (diffMin < 60) return `${diffMin}m ago`;
+      const diffHours = Math.round(diffMin / 60);
+      if (diffHours < 24) return `${diffHours}h ago`;
+      const diffDays = Math.round(diffHours / 24);
+      if (diffDays === 1) return 'Yesterday';
+      if (diffDays < 7) return `${diffDays}d ago`;
+      return d.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+    } catch {
+      return 'Recently';
     }
   };
 
-  // Folder Actions
+  const getFileKind = (file: SearchResultItem): 'image' | 'document' | 'archive' | 'video' | 'audio' | 'code' => {
+    const ext = (file.extension || '').toLowerCase();
+    const cat = (file.category || '').toUpperCase();
+    if (cat === 'IMAGE' || ['.jpg', '.jpeg', '.png', '.webp', '.bmp', '.gif', '.svg'].includes(ext)) {
+      return 'image';
+    }
+    if (cat === 'ARCHIVE' || ['.zip', '.rar', '.7z', '.tar', '.gz'].includes(ext)) {
+      return 'archive';
+    }
+    if (cat === 'VIDEO' || ['.mp4', '.mkv', '.avi', '.mov', '.webm'].includes(ext)) {
+      return 'video';
+    }
+    if (cat === 'AUDIO' || ['.mp3', '.wav', '.flac', '.m4a', '.aac'].includes(ext)) {
+      return 'audio';
+    }
+    if (cat === 'CODE' || ['.py', '.js', '.ts', '.tsx', '.jsx', '.html', '.css', '.json', '.sql'].includes(ext)) {
+      return 'code';
+    }
+    return 'document';
+  };
+
+  const getFileFigmaIcon = (file: SearchResultItem): FigmaIconName => {
+    const kind = getFileKind(file);
+    if (kind === 'image') return 'image';
+    if (kind === 'archive') return 'folder';
+    if (kind === 'video') return 'video';
+    if (kind === 'audio') return 'music';
+    if (kind === 'code') return 'code';
+    return 'file';
+  };
+
+  const handleOpenFile = (path: string, reveal = false) => {
+    apiClient
+      .openFile(path, reveal)
+      .then(() => setNotice(reveal ? 'Revealed in file manager' : 'Opened file'))
+      .catch(() => setNotice('Could not open file directly'));
+  };
+
+  // Add folder handler
   const handleAddFolder = async (path: string) => {
-    await apiClient.addFolder(path);
-    refreshSystemData();
+    try {
+      await apiClient.addFolder(path);
+      setNotice('Folder added to index library');
+      setShowAddFolderModal(false);
+      refreshSystemData();
+      apiClient.triggerRescan(path).catch(() => {});
+    } catch (err) {
+      setNotice('Failed to add folder');
+    }
   };
 
-  const handleRemoveFolder = async (path: string) => {
-    await apiClient.removeFolder(path);
-    refreshSystemData();
-  };
-
-  const handleRescanFolder = async (path: string) => {
-    await apiClient.triggerRescan(path);
-    refreshSystemData();
-  };
-
-  // History & Saved Searches Actions
-  const handleClearHistory = async () => {
-    await apiClient.clearSearchHistory();
-    setHistory([]);
-  };
-
-  const handleDeleteSavedSearch = async (id: number) => {
-    await apiClient.deleteSavedSearch(id);
-    setSavedSearches((prev) => prev.filter((s) => s.id !== id));
-  };
-
-  // Check if we are on Home page
-  const isHomePage = activeNav === 'home';
+  // Total counts
+  const totalFilesCount = systemStatus?.total_files || recentFiles.length;
+  const imageCount =
+    systemStatus?.category_counts?.IMAGE ||
+    recentFiles.filter((f) => getFileKind(f) === 'image').length;
 
   return (
-    <div className="relative flex h-screen w-screen overflow-hidden bg-black text-[#f4f4f5] p-3 sm:p-4 gap-3 sm:gap-4 select-none">
-      {/* 1. Interactive Gradient Background with smooth mouse reaction */}
-      <InteractiveGradientBackground interactive={animationEnabled} />
+    <ErrorBoundary>
+      <main ref={shellRef} className="app-shell select-none">
+        {/* Cursor Reactive Gradient Orbs & Noise Texture */}
+        <div className="orb orb-primary" />
+        <div className="orb orb-secondary" />
+        <div className="pointer-aura" />
+        <div className="noise" />
 
-      {/* 2. Main Desktop Sidebar: 2 Floating Islands + Black Pill Buttons */}
-      <Sidebar
-        activeNav={activeNav}
-        onSelectNav={handleSelectNav}
-        isCollapsed={isSidebarCollapsed}
-        onToggleCollapse={() => setIsSidebarCollapsed((prev) => !prev)}
-        totalIndexedFiles={systemStatus?.total_files || 0}
-      />
+        {/* 1. Left Floating Glass Sidebar */}
+        <aside className="app-sidebar">
+          {/* Brand Header */}
+          <div className="app-brand">
+            <span className="brand-icon">
+              <FigmaIcon name="logo" size={20} />
+            </span>
+            <span className="font-brigold text-xl tracking-wide font-normal" style={{ fontFamily: "'Brigold', 'Brigold DEMO', sans-serif" }}>
+              i file
+            </span>
+          </div>
 
-      {/* 3. Center Workspace Area */}
-      <div className="relative flex-1 flex flex-col h-full min-w-0 z-10 overflow-hidden gap-3">
-        {/* Top Floating Island Header (Shown when user has navigated past Hero Home) */}
-        <TopBar
-          showCompactSearch={!isHomePage}
-          query={searchQuery}
-          onQueryChange={setSearchQuery}
-          onSearch={(q) => handleExecuteSearch(q)}
-          isLoading={isSearching}
-          activeFilterCount={(currentCategory !== 'ALL' ? 1 : 0) + selectedFormats.length}
-          totalFiles={systemStatus?.total_files || 0}
-          isScanning={indexingStatus.is_scanning}
-        />
+          {/* Quick Action Button */}
+          <button
+            className="new-file"
+            type="button"
+            onClick={() => setShowAddFolderModal(true)}
+            title="Add folder to index (Ctrl+N)"
+          >
+            <FigmaIcon name="plus" size={17} />
+            <span>New extraction</span>
+            <kbd>⌘ N</kbd>
+          </button>
 
-        {/* Dynamic Center Content View */}
-        <main className="flex-1 overflow-y-auto px-1 py-1 flex flex-col min-h-0">
-          {/* HOME SCREEN LANDING */}
-          {isHomePage && (
-            <HeroSearch
-              query={searchQuery}
-              onQueryChange={setSearchQuery}
-              onSearch={(q) => handleExecuteSearch(q)}
-              isLoading={isSearching}
-              onSelectCategory={(cat) => {
-                setCurrentCategory(cat);
-                handleExecuteSearch('*', cat);
+          {/* Primary Navigation */}
+          <nav className="primary-nav" aria-label="Workspace navigation">
+            <button
+              className={view === 'files' ? 'active' : ''}
+              type="button"
+              onClick={() => {
+                setView('files');
+                handleClearSearch();
               }}
-              categoryCounts={systemStatus?.category_counts}
-              totalFiles={systemStatus?.total_files || 0}
-              recentFiles={recentFiles}
-              recentSearches={history.slice(0, 6).map((h) => h.query)}
-              onOpenFile={handleOpenFile}
-              onSelectFile={setSelectedFile}
-            />
-          )}
+            >
+              <FigmaIcon name="folder" size={17} />
+              <span>My Files</span>
+              <small>{totalFilesCount}</small>
+            </button>
 
-          {/* SEARCH RESULTS VIEW */}
-          {(activeNav === 'all' ||
-            ['images', 'documents', 'videos', 'audio', 'code', 'archives'].includes(activeNav)) && !isHomePage && (
-              <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col gap-5 text-black overflow-y-auto">
-                {/* Smart Filter Summary */}
-                <SmartFilterSummary
-                  query={submittedQuery}
-                  totalResults={totalResults}
-                  elapsedMs={elapsedMs}
-                  currentCategory={currentCategory}
-                  onSelectCategory={handleCategorySelect}
-                  selectedFormats={selectedFormats}
-                  onToggleFormat={handleToggleFormat}
-                  onSelectAllFormats={handleSelectAllFormats}
-                  onClearCategoryFormats={handleClearCategoryFormats}
-                  onClearAllFilters={handleClearAllFilters}
-                  sortBy={sortBy}
-                  onSortChange={handleSortChange}
-                  viewMode={viewMode}
-                  onViewModeChange={setViewMode}
-                  isVisualQuery={isVisualQuery}
-                />
+            <button
+              className={view === 'gallery' ? 'active' : ''}
+              type="button"
+              onClick={() => {
+                setView('gallery');
+                handleClearSearch();
+              }}
+            >
+              <FigmaIcon name="gallery" size={17} />
+              <span>Gallery</span>
+              <small>{imageCount}</small>
+            </button>
 
-                {/* Results Section */}
-                <ErrorBoundary fallbackTitle="Results Rendering Error" onReset={handleClearAllFilters}>
-                  {isSearching ? (
-                    <div className="flex flex-col items-center justify-center p-24 text-center space-y-3 rounded-2xl bg-[#090a0f] text-white border border-white/10 shadow-lg">
-                      <Loader2 className="w-8 h-8 animate-spin text-white" />
-                      <span className="text-sm font-medium text-zinc-300">Searching your files with local AI...</span>
-                    </div>
-                  ) : results.length > 0 ? (
-                    viewMode === 'grid' ? (
-                      <FileGrid
-                        files={results}
-                        selectedFile={selectedFile}
-                        onSelectFile={setSelectedFile}
-                        onOpenFile={(p) => handleOpenFile(p)}
-                      />
-                    ) : (
-                      <FileList
-                        files={results}
-                        selectedFile={selectedFile}
-                        onSelectFile={setSelectedFile}
-                        onOpenFile={(p) => handleOpenFile(p)}
-                      />
-                    )
-                  ) : (
-                    <div className="flex flex-col items-center justify-center p-20 text-center space-y-3 rounded-2xl bg-[#090a0f] text-white border border-white/10 shadow-lg">
-                      <FileQuestion className="w-10 h-10 text-zinc-400" />
-                      <h3 className="text-base font-semibold text-white">No files matched those filters</h3>
-                      <p className="text-xs text-zinc-400 max-w-sm">
-                        Try broadening your search query or clearing active format extensions.
-                      </p>
-                      <button
-                        type="button"
-                        onClick={handleClearAllFilters}
-                        className="px-4 py-2 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors mt-2 shadow-md"
-                      >
-                        Clear all filters
-                      </button>
-                    </div>
-                  )}
-                </ErrorBoundary>
-              </div>
-            )}
+            <button
+              className={view === 'analysis' ? 'active' : ''}
+              type="button"
+              onClick={() => setView('analysis')}
+            >
+              <FigmaIcon name="analysis" size={17} />
+              <span>Analysis</span>
+            </button>
 
-          {/* FOLDERS / INDEXING VIEW */}
-          {activeNav === 'indexing' && (
-            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
-              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
-                <FolderManager
-                  folders={folders}
-                  indexingStatus={indexingStatus}
-                  onAddFolder={handleAddFolder}
-                  onRemoveFolder={handleRemoveFolder}
-                  onRescanFolder={handleRescanFolder}
-                />
-              </div>
+            <button
+              className={view === 'folders' ? 'active' : ''}
+              type="button"
+              onClick={() => setView('folders')}
+            >
+              <FigmaIcon name="archive" size={17} />
+              <span>Folders</span>
+              <small>{folders.length}</small>
+            </button>
+
+            <button
+              className={view === 'history' ? 'active' : ''}
+              type="button"
+              onClick={() => setView('history')}
+            >
+              <FigmaIcon name="clock" size={17} />
+              <span>History</span>
+              <small>{history.length}</small>
+            </button>
+          </nav>
+
+          {/* Recently Added Files Section */}
+          <div className="recent-files">
+            <div className="sidebar-heading">
+              <span>Recently added</span>
+              <button
+                type="button"
+                aria-label="Refresh"
+                onClick={refreshSystemData}
+                title="Refresh recently added"
+              >
+                <FigmaIcon name="more" size={15} />
+              </button>
             </div>
+
+            {recentFiles.slice(0, 4).map((file) => (
+              <button
+                type="button"
+                key={file.file_id}
+                onClick={() => {
+                  setSelectedFile(file);
+                }}
+                title={file.filename}
+              >
+                <span>
+                  <FigmaIcon name={getFileFigmaIcon(file)} size={15} />
+                </span>
+                <span>{file.filename}</span>
+              </button>
+            ))}
+          </div>
+
+          {/* Sidebar Footer: Settings & Indexing Bar */}
+          <div className="sidebar-footer">
+            <button type="button" onClick={() => setShowSettingsModal(true)}>
+              <FigmaIcon name="settings" size={17} />
+              <span>Settings</span>
+              <FigmaIcon name="chevron" size={13} />
+            </button>
+
+            <div className="storage-copy">
+              <span>
+                {indexingStatus.is_scanning
+                  ? 'Scanning files...'
+                  : `${totalFilesCount} files indexed`}
+              </span>
+              <span>100%</span>
+            </div>
+            <div className="storage-bar">
+              <i style={{ width: indexingStatus.is_scanning ? '80%' : '100%' }} />
+            </div>
+          </div>
+        </aside>
+
+        {/* 2. Main Workspace */}
+        <section className="workspace">
+          {/* Hero Greeting & Search Header (Visible on Files & Gallery views) */}
+          {(view === 'files' || view === 'gallery') && (
+            <>
+              {/* Rotating Starburst Greeting */}
+              <div className="hero-greeting">
+                <span className="greeting-mark" aria-hidden="true">
+                  <i />
+                  <i />
+                  <i />
+                  <i />
+                </span>
+                <h1 className="font-brigold" style={{ fontFamily: "'Brigold', 'Brigold DEMO', sans-serif" }}>
+                  Hey There
+                </h1>
+              </div>
+
+              {/* Centered Hero Search Bar */}
+              <div className="hero-search" role="search">
+                <form onSubmit={handleSearchSubmit} className="search-field">
+                  <FigmaIcon name="search" size={20} />
+                  <input
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (!e.target.value) handleClearSearch();
+                    }}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') handleSearchSubmit();
+                    }}
+                    placeholder="Search files, text, or metadata..."
+                    autoFocus
+                  />
+                  {searchQuery && (
+                    <button
+                      type="button"
+                      onClick={handleClearSearch}
+                      className="text-zinc-500 hover:text-white text-xs px-2"
+                      title="Clear"
+                    >
+                      ✕
+                    </button>
+                  )}
+                </form>
+
+                <div className="search-controls">
+                  <div>
+                    <button
+                      className="search-add"
+                      type="button"
+                      onClick={() => setShowAddFolderModal(true)}
+                      aria-label="Add folder"
+                      title="Add folder to library"
+                    >
+                      <FigmaIcon name="plus" size={17} />
+                    </button>
+                    <button
+                      className={`mode-chip ${!smartMode ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => {
+                        setSmartMode(false);
+                        setNotice('Standard Hybrid BM25 + SBERT search active');
+                      }}
+                    >
+                      Search
+                    </button>
+                    <button
+                      className={`mode-chip ${smartMode ? 'active' : ''}`}
+                      type="button"
+                      onClick={() => {
+                        setSmartMode(true);
+                        setNotice('Smart Compositional AI + Vision search active');
+                      }}
+                    >
+                      <FigmaIcon name="sparkles" size={13} />
+                      Smart
+                    </button>
+                  </div>
+
+                  <div>
+                    <span>
+                      {view === 'gallery'
+                        ? 'Images only'
+                        : activeCategory === 'ALL'
+                        ? 'All files'
+                        : activeCategory}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSortOption((prev) => (prev === 'az' ? 'za' : 'az'));
+                        setNotice(`Sorting ${sortOption === 'az' ? 'Z–A' : 'A–Z'}`);
+                      }}
+                      aria-label="Toggle sort order"
+                      title="Toggle sort order"
+                    >
+                      <FigmaIcon name="sort" size={17} />
+                    </button>
+                  </div>
+                </div>
+
+                {/* Glowing laser hairline indicator following cursor */}
+                <i />
+              </div>
+
+              {/* Horizontal Category Chips Bar */}
+              <div className="category-bar">
+                {CATEGORIES_CONFIG.map((cat) => (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`category-chip ${activeCategory === cat.id ? 'active' : ''}`}
+                    onClick={() => handleSelectCategory(cat.id)}
+                  >
+                    <span>{cat.label}</span>
+                  </button>
+                ))}
+              </div>
+
+              {/* Expandable Format Pills if selected category has specific formats */}
+              {CATEGORIES_CONFIG.find((c) => c.id === activeCategory)?.formats && (
+                <div className="flex items-center gap-1.5 overflow-x-auto py-1 mb-3 scrollbar-none">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider mr-1">
+                    Formats:
+                  </span>
+                  {CATEGORIES_CONFIG.find((c) => c.id === activeCategory)?.formats?.map((fmt) => {
+                    const isSelected = selectedFormats.includes(fmt.ext);
+                    return (
+                      <button
+                        key={fmt.ext}
+                        type="button"
+                        onClick={() => toggleFormat(fmt.ext)}
+                        className={`text-[9.5px] px-2.5 py-1 rounded-full border transition-all ${
+                          isSelected
+                            ? 'bg-white text-zinc-950 border-white font-bold shadow-sm'
+                            : 'bg-white/[0.04] text-zinc-400 border-white/[0.08] hover:text-white hover:border-white/20'
+                        }`}
+                        style={isSelected ? { backgroundColor: '#ffffff', color: '#09090b' } : {}}
+                      >
+                        {fmt.label}
+                      </button>
+                    );
+                  })}
+                  {selectedFormats.length > 0 && (
+                    <button
+                      type="button"
+                      onClick={() => setSelectedFormats([])}
+                      className="text-[9.5px] text-zinc-500 hover:text-rose-400 ml-2"
+                    >
+                      Clear formats
+                    </button>
+                  )}
+                </div>
+              )}
+            </>
           )}
 
-          {/* RECENT SEARCHES VIEW */}
-          {activeNav === 'recent_searches' && (
-            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
-              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
+          {/* 3. Panel Views */}
+          {/* Analysis View */}
+          {view === 'analysis' && (
+            <section className="analytics-panel">
+              <div className="analytics-head">
+                <div>
+                  <span className="eyebrow">Local Neural Engine</span>
+                  <h2>Workspace activity & AI health</h2>
+                </div>
+                <strong>Operational</strong>
+              </div>
+
+              {/* Animated Activity Chart */}
+              <div className="chart">
+                {[34, 51, 42, 68, 58, 81, 72, 93, 79, 100, 91, 116].map((height, index) => (
+                  <i key={index} style={{ height }} title={`Metric: ${height}`} />
+                ))}
+              </div>
+
+              {/* Core System Metrics */}
+              <div className="metrics">
+                <div>
+                  <span>Files indexed</span>
+                  <strong>{totalFilesCount.toLocaleString()}</strong>
+                  <small>Across {folders.length} libraries</small>
+                </div>
+                <div>
+                  <span>Database health</span>
+                  <strong>SQLite + FTS5</strong>
+                  <small>BM25 lexical ranking active</small>
+                </div>
+                <div>
+                  <span>Offline AI pipeline</span>
+                  <strong>100% Local</strong>
+                  <small>Zero data leaves your PC</small>
+                </div>
+              </div>
+
+              {/* AI Pipeline Details */}
+              <div className="mt-6 pt-6 border-t border-white/[0.07] grid grid-cols-1 md:grid-cols-3 gap-3">
+                <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                    Dense Semantic Model
+                  </span>
+                  <div className="text-sm font-semibold text-white mt-1">all-MiniLM-L6-v2</div>
+                  <small className="text-[10px] text-emerald-400">PyTorch CPU / GPU Active</small>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                    Vision Embedding Model
+                  </span>
+                  <div className="text-sm font-semibold text-white mt-1">clip-ViT-B-32</div>
+                  <small className="text-[10px] text-emerald-400">Visual Zero-shot Active</small>
+                </div>
+
+                <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
+                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
+                    Visual Language Understanding
+                  </span>
+                  <div className="text-sm font-semibold text-white mt-1">Qwen3.5-4B VLM</div>
+                  <small className="text-[10px] text-sky-400">Local llama.cpp Bridge</small>
+                </div>
+              </div>
+
+              {/* Quick Indexing Actions */}
+              <div className="mt-6 flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (folders[0]) {
+                      apiClient.triggerRescan(folders[0].path);
+                      setNotice('Rescanning index...');
+                    } else {
+                      setShowAddFolderModal(true);
+                    }
+                  }}
+                  className="btn-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-colors shadow-sm"
+                  style={{ backgroundColor: '#ffffff', color: '#09090b' }}
+                >
+                  Scan Library Now
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setView('folders')}
+                  className="px-4 py-2 rounded-xl bg-white/[0.06] text-white font-medium text-xs hover:bg-white/[0.1] border border-white/[0.08] transition-colors"
+                >
+                  Manage Folders
+                </button>
+              </div>
+            </section>
+          )}
+
+          {/* Folders Management View */}
+          {view === 'folders' && (
+            <section className="library-panel">
+              <FolderManager
+                folders={folders}
+                indexingStatus={indexingStatus}
+                onAddFolder={handleAddFolder}
+                onRemoveFolder={async (p) => {
+                  await apiClient.removeFolder(p);
+                  setNotice('Folder removed');
+                  refreshSystemData();
+                }}
+                onRescanFolder={async (p) => {
+                  await apiClient.triggerRescan(p);
+                  setNotice('Folder scan triggered');
+                }}
+              />
+            </section>
+          )}
+
+          {/* History & Saved Searches View */}
+          {view === 'history' && (
+            <section className="library-panel">
+              <div className="flex items-center gap-2 mb-4 border-b border-white/[0.08] pb-3">
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('history')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    historyTab === 'history'
+                      ? 'tab-active-white shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                  style={historyTab === 'history' ? { backgroundColor: '#ffffff', color: '#09090b' } : {}}
+                >
+                  Search History ({history.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setHistoryTab('saved')}
+                  className={`px-3 py-1.5 rounded-lg text-xs font-bold transition-colors ${
+                    historyTab === 'saved'
+                      ? 'tab-active-white shadow-sm'
+                      : 'text-zinc-400 hover:text-white'
+                  }`}
+                  style={historyTab === 'saved' ? { backgroundColor: '#ffffff', color: '#09090b' } : {}}
+                >
+                  Saved Searches ({savedSearches.length})
+                </button>
+              </div>
+
+              {historyTab === 'history' ? (
                 <SearchHistoryView
                   history={history}
                   onSelectQuery={(q) => {
                     setSearchQuery(q);
-                    handleExecuteSearch(q);
+                    setView('files');
+                    executeSearch(q);
                   }}
-                  onClearHistory={handleClearHistory}
+                  onClearHistory={async () => {
+                    await apiClient.clearSearchHistory();
+                    setHistory([]);
+                    setNotice('Search history cleared');
+                  }}
                 />
-              </div>
-            </div>
-          )}
-
-          {/* SAVED SEARCHES VIEW */}
-          {activeNav === 'saved_searches' && (
-            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
-              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
+              ) : (
                 <SavedSearchesView
                   savedSearches={savedSearches}
                   onSelectQuery={(q) => {
                     setSearchQuery(q);
-                    handleExecuteSearch(q);
+                    setView('files');
+                    executeSearch(q);
                   }}
-                  onDeleteSavedSearch={handleDeleteSavedSearch}
+                  onDeleteSavedSearch={async (id) => {
+                    await apiClient.deleteSavedSearch(id);
+                    setSavedSearches((prev) => prev.filter((s) => s.id !== id));
+                    setNotice('Saved search deleted');
+                  }}
                 />
-              </div>
-            </div>
+              )}
+            </section>
           )}
 
-          {/* SETTINGS VIEW */}
-          {activeNav === 'settings' && (
-            <div className="w-full flex-1 rounded-3xl bg-gradient-to-br from-[#9ca3af] via-[#e2e8f0] to-[#ffffff] shadow-[0_24px_60px_rgba(0,0,0,0.65)] border border-white/60 p-5 sm:p-7 flex flex-col text-black overflow-y-auto">
-              <div className="bg-[#090a0f] text-white rounded-2xl p-6 shadow-xl border border-white/10">
-                <SettingsDialog
-                  systemStatus={systemStatus}
-                  animationEnabled={animationEnabled}
-                  onToggleAnimation={() => setAnimationEnabled((prev) => !prev)}
-                  defaultViewMode={viewMode}
-                  onChangeDefaultView={setViewMode}
-                />
-              </div>
-            </div>
-          )}
-        </main>
-      </div>
+          {/* Files / Gallery Library Grid Panel */}
+          {(view === 'files' || view === 'gallery') && (
+            <section className="library-panel">
+              {/* Library Toolbar */}
+              <div className="library-toolbar">
+                <div className="result-count">
+                  <strong>
+                    {hasSearched
+                      ? `Search results for "${searchQuery}"`
+                      : view === 'gallery'
+                      ? 'Image library'
+                      : 'Recent files'}
+                  </strong>
+                  <span>
+                    {visibleFiles.length} items
+                    {hasSearched && searchElapsedMs > 0 ? ` · ${searchElapsedMs}ms` : ''}
+                  </span>
+                </div>
 
-      {/* 4. Right-Side File Preview Drawer */}
-      {selectedFile && (
-        <ErrorBoundary fallbackTitle="Preview Error" onReset={() => setSelectedFile(null)}>
+                <div className="filter-pills">
+                  <button
+                    className={!hasSearched ? 'active' : ''}
+                    type="button"
+                    onClick={() => {
+                      handleClearSearch();
+                      setActiveCategory('ALL');
+                    }}
+                  >
+                    Recently opened
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setNotice('Files sorted by latest indexed');
+                      setSortOption('date');
+                    }}
+                  >
+                    Recently indexed
+                  </button>
+                  <button type="button" onClick={() => setView('history')}>
+                    Search history
+                  </button>
+                </div>
+
+                <div className="view-actions">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const next =
+                        sortOption === 'relevance'
+                          ? 'az'
+                          : sortOption === 'az'
+                          ? 'za'
+                          : sortOption === 'za'
+                          ? 'date'
+                          : sortOption === 'date'
+                          ? 'size'
+                          : 'relevance';
+                      setSortOption(next);
+                      setNotice(`Sorting: ${next.toUpperCase()}`);
+                    }}
+                    title="Change sort"
+                  >
+                    <FigmaIcon name="sort" size={16} />
+                    <span>
+                      {sortOption === 'az'
+                        ? 'A–Z'
+                        : sortOption === 'za'
+                        ? 'Z–A'
+                        : sortOption === 'date'
+                        ? 'Date'
+                        : sortOption === 'size'
+                        ? 'Size'
+                        : 'Relevance'}
+                    </span>
+                  </button>
+
+                  <button
+                    className={compact ? 'active' : ''}
+                    type="button"
+                    onClick={() => setCompact((v) => !v)}
+                    aria-label="Toggle grid or list view"
+                    title={compact ? 'Switch to Grid View' : 'Switch to Compact View'}
+                  >
+                    <FigmaIcon name={compact ? 'grid' : 'filter'} size={17} />
+                  </button>
+                </div>
+              </div>
+
+              {/* Loading State */}
+              {isSearching ? (
+                <div className="py-20 flex flex-col items-center justify-center text-zinc-400 gap-3">
+                  <span className="greeting-mark" aria-hidden="true">
+                    <i />
+                    <i />
+                    <i />
+                    <i />
+                  </span>
+                  <span className="text-xs font-medium">Neural retrieval in progress...</span>
+                </div>
+              ) : visibleFiles.length > 0 ? (
+                <div className={`file-grid ${compact ? 'compact' : ''}`}>
+                  {visibleFiles.map((file, index) => {
+                    const kind = getFileKind(file);
+                    const artIndex = (file.file_id % 3) * 2 + 2; // maps to art-2, art-4, art-6
+                    const isSelected = selectedFile?.file_id === file.file_id;
+
+                    return (
+                      <button
+                        key={file.file_id || `${file.path}-${index}`}
+                        className={`file-card ${isSelected ? 'selected' : ''}`}
+                        type="button"
+                        onClick={() => setSelectedFile(file)}
+                        style={{ animationDelay: `${Math.min(index * 30, 300)}ms` }}
+                      >
+                        {/* Preview Section */}
+                        <span className={`file-preview art-${artIndex}`}>
+                          {kind === 'image' ? (
+                            <img
+                              src={apiClient.getThumbnailUrl(file.file_id, 320)}
+                              alt={file.filename}
+                              loading="lazy"
+                              onError={(e) => {
+                                // Graceful fallback to Figma geometric mountain line-art
+                                (e.currentTarget as HTMLElement).style.display = 'none';
+                                const parent = e.currentTarget.parentElement;
+                                if (parent && !parent.querySelector('.mountain-art')) {
+                                  const art = document.createElement('span');
+                                  art.className = 'mountain-art';
+                                  art.innerHTML = '<i/><i/><i/>';
+                                  parent.appendChild(art);
+                                }
+                              }}
+                            />
+                          ) : kind === 'document' ? (
+                            <span className="document-preview">
+                              <FigmaIcon name="file" size={42} />
+                              <i />
+                              <i />
+                              <i />
+                            </span>
+                          ) : kind === 'archive' ? (
+                            <span className="archive-preview">
+                              <FigmaIcon name="folder" size={44} />
+                              <b>ZIP</b>
+                            </span>
+                          ) : (
+                            <span className="document-preview">
+                              <FigmaIcon name={getFileFigmaIcon(file)} size={42} />
+                            </span>
+                          )}
+
+                          {/* Hover Menu Button */}
+                          <span
+                            className="file-menu"
+                            title="Actions"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleOpenFile(file.path, false);
+                            }}
+                          >
+                            <FigmaIcon name="external" size={14} />
+                          </span>
+                        </span>
+
+                        {/* File Info Card Bottom */}
+                        <span className="file-info">
+                          <span>
+                            <strong>{file.filename}</strong>
+                            <small>{formatRelativeTime(file.modified_at || file.created_at)}</small>
+                          </span>
+                          <span className="flex items-center justify-between text-[8.5px] text-zinc-500">
+                            <small>
+                              {(file.extension || 'FILE').toUpperCase().replace('.', '')} ·{' '}
+                              {formatBytes(file.size_bytes)}
+                            </small>
+                            {file.relevance_score > 0 && (
+                              <span className="text-sky-400 font-mono">
+                                {Math.round(file.relevance_score * 100)}%
+                              </span>
+                            )}
+                          </span>
+                        </span>
+                      </button>
+                    );
+                  })}
+
+                  {/* Drop Card at end of grid */}
+                  <button
+                    className="drop-card"
+                    type="button"
+                    onClick={() => setShowAddFolderModal(true)}
+                    title="Add local folder to library"
+                  >
+                    <span>
+                      <FigmaIcon name="upload" size={20} />
+                    </span>
+                    <strong>Add files & folders</strong>
+                    <small>Browse your computer</small>
+                  </button>
+                </div>
+              ) : (
+                /* Empty State Matching Figma */
+                <div className="empty-state">
+                  <span>
+                    <FigmaIcon name="search" size={24} />
+                  </span>
+                  <strong>No files found</strong>
+                  <p>Try a different search query or add a new folder to index.</p>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      handleClearSearch();
+                      setActiveCategory('ALL');
+                    }}
+                  >
+                    Clear search
+                  </button>
+                </div>
+              )}
+            </section>
+          )}
+        </section>
+
+        {/* 4. Slide-in Preview Drawer */}
+        {selectedFile && (
           <PreviewDrawer
             file={selectedFile}
             onClose={() => setSelectedFile(null)}
             onOpenFile={handleOpenFile}
           />
-        </ErrorBoundary>
-      )}
-    </div>
+        )}
+
+        {/* 5. Settings Modal Dialog */}
+        {showSettingsModal && (
+          <div className="modal-backdrop" onClick={() => setShowSettingsModal(false)}>
+            <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.08]">
+                <h3 className="font-semibold text-white text-base">Application Settings</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowSettingsModal(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                >
+                  <FigmaIcon name="close" size={18} />
+                </button>
+              </div>
+
+              <SettingsDialog
+                systemStatus={systemStatus}
+                animationEnabled={animationEnabled}
+                onToggleAnimation={() => setAnimationEnabled((v) => !v)}
+                cursorTrailEnabled={cursorTrailEnabled}
+                onToggleCursorTrail={() => setCursorTrailEnabled((v) => !v)}
+                defaultViewMode={compact ? 'list' : 'grid'}
+                onChangeDefaultView={(m) => setCompact(m === 'list')}
+              />
+            </div>
+          </div>
+        )}
+
+        {/* 6. Add Folder Modal Dialog */}
+        {showAddFolderModal && (
+          <div className="modal-backdrop" onClick={() => setShowAddFolderModal(false)}>
+            <div className="modal-panel" onClick={(e) => e.stopPropagation()}>
+              <div className="flex items-center justify-between mb-4 pb-2 border-b border-white/[0.08]">
+                <h3 className="font-semibold text-white text-base">Index a Local Directory</h3>
+                <button
+                  type="button"
+                  onClick={() => setShowAddFolderModal(false)}
+                  className="p-1 rounded-lg text-zinc-400 hover:text-white"
+                >
+                  <FigmaIcon name="close" size={18} />
+                </button>
+              </div>
+
+              <p className="text-xs text-zinc-400 mb-4">
+                Enter an absolute path to a folder on your computer to scan and index for instant
+                neural retrieval, OCR, and AI document understanding.
+              </p>
+
+              <form
+                onSubmit={(e) => {
+                  e.preventDefault();
+                  const input = (e.currentTarget.elements.namedItem('folderPath') as HTMLInputElement)
+                    ?.value;
+                  if (input && input.trim()) {
+                    handleAddFolder(input.trim());
+                  }
+                }}
+                className="space-y-4"
+              >
+                <input
+                  name="folderPath"
+                  type="text"
+                  placeholder="e.g. C:\Users\space\Documents or D:\Projects"
+                  className="w-full px-3.5 py-2.5 rounded-xl bg-white/[0.05] border border-white/[0.1] text-sm text-white focus:outline-none focus:border-white/30"
+                  autoFocus
+                />
+                <div className="flex justify-end gap-2 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => setShowAddFolderModal(false)}
+                    className="px-4 py-2 rounded-xl text-xs text-zinc-400 hover:text-white"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-colors shadow-sm"
+                    style={{ backgroundColor: '#ffffff', color: '#09090b' }}
+                  >
+                    Add and Index
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
+        {/* 7. Hidden File Input for quick extractions */}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          className="visually-hidden"
+          onChange={(e) => {
+            if (e.target.files && e.target.files.length > 0) {
+              setNotice(`${e.target.files.length} files selected`);
+            }
+          }}
+        />
+
+        {/* 8. Floating Cursor File-Tag Trail Effect */}
+        <CursorTrailOverlay enabled={cursorTrailEnabled} />
+
+        {/* 9. Figma Styled Toast Notification */}
+        {notice && (
+          <div className="toast">
+            <span>✓</span>
+            {notice}
+          </div>
+        )}
+      </main>
+    </ErrorBoundary>
   );
 };
+
+export default App;

@@ -6,6 +6,8 @@ interface SettingsDialogProps {
   systemStatus: SystemStatus | null;
   animationEnabled: boolean;
   onToggleAnimation: () => void;
+  cursorTrailEnabled?: boolean;
+  onToggleCursorTrail?: () => void;
   defaultViewMode: 'grid' | 'list';
   onChangeDefaultView: (mode: 'grid' | 'list') => void;
 }
@@ -14,6 +16,8 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
   systemStatus,
   animationEnabled,
   onToggleAnimation,
+  cursorTrailEnabled = true,
+  onToggleCursorTrail,
   defaultViewMode,
   onChangeDefaultView,
 }) => {
@@ -101,6 +105,29 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
             </button>
           </div>
 
+          {/* Cursor File-Tag Trail Toggle */}
+          <div className="flex items-center justify-between p-4">
+            <div>
+              <span className="text-sm font-semibold text-white block">File-Tag Cursor Trail Effect</span>
+              <span className="text-xs text-zinc-500 block mt-0.5">
+                Spawns floating mini file-type tags (PDF, JPG, DOC, TXT, CODE) and stardust particles following mouse movement.
+              </span>
+            </div>
+            <button
+              type="button"
+              onClick={onToggleCursorTrail}
+              className={`w-12 h-6 rounded-full transition-colors relative ${
+                cursorTrailEnabled ? 'bg-sky-500' : 'bg-white/10'
+              }`}
+            >
+              <div
+                className={`w-4 h-4 rounded-full bg-white absolute top-1 transition-transform ${
+                  cursorTrailEnabled ? 'right-1' : 'left-1'
+                }`}
+              />
+            </button>
+          </div>
+
           {/* Default Search View Mode */}
           <div className="flex items-center justify-between p-4">
             <div>
@@ -113,18 +140,20 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
               <button
                 type="button"
                 onClick={() => onChangeDefaultView('grid')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  defaultViewMode === 'grid' ? 'bg-white text-black font-semibold' : 'text-zinc-400 hover:text-white'
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  defaultViewMode === 'grid' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-white'
                 }`}
+                style={defaultViewMode === 'grid' ? { backgroundColor: '#ffffff', color: '#09090b' } : {}}
               >
                 Grid
               </button>
               <button
                 type="button"
                 onClick={() => onChangeDefaultView('list')}
-                className={`px-3 py-1 rounded-lg text-xs font-medium transition-colors ${
-                  defaultViewMode === 'list' ? 'bg-white text-black font-semibold' : 'text-zinc-400 hover:text-white'
+                className={`px-3 py-1 rounded-lg text-xs font-semibold transition-colors ${
+                  defaultViewMode === 'list' ? 'bg-white text-zinc-950 shadow-sm' : 'text-zinc-400 hover:text-white'
                 }`}
+                style={defaultViewMode === 'list' ? { backgroundColor: '#ffffff', color: '#09090b' } : {}}
               >
                 List
               </button>

@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { createPortal } from 'react-dom';
 import { X, ExternalLink, Folder, Copy, Check, FileText, Brain } from 'lucide-react';
 import { SearchResultItem, DocumentUnderstanding } from '../../api/types';
 import { apiClient } from '../../api/client';
@@ -67,8 +68,17 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
 
   const previewText = file.ocr_text || file.extracted_text || file.snippet || '';
 
-  return (
-    <aside className="w-96 h-full flex flex-col bg-[#111216]/95 border-l border-white/[0.08] shadow-[-16px_0_40px_rgba(0,0,0,0.5)] backdrop-blur-2xl z-40 animate-in slide-in-from-right duration-200">
+  return createPortal(
+    <>
+      {/* Click outside backdrop to close */}
+      <div
+        className="preview-drawer-backdrop"
+        onClick={onClose}
+        aria-label="Close preview backdrop"
+      />
+
+      {/* Side Drawer Panel strictly docked to the right */}
+      <aside className="preview-drawer-panel" onClick={(e) => e.stopPropagation()}>
       {/* Top Header */}
       <div className="flex items-center justify-between px-5 py-4 border-b border-white/[0.08] bg-white/[0.02]">
         <div className="flex items-center gap-2">
@@ -207,15 +217,16 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
               <button
                 type="button"
                 onClick={() => onOpenFile(file.path)}
-                className="flex-1 py-2.5 rounded-xl bg-white text-black font-semibold text-xs hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 shadow-lg"
+                className="btn-white flex-1 py-2.5 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-colors flex items-center justify-center gap-2 shadow-lg"
+                style={{ backgroundColor: '#ffffff', color: '#09090b' }}
               >
-                <ExternalLink className="w-3.5 h-3.5" />
-                <span>Open File</span>
+                <ExternalLink className="w-3.5 h-3.5" style={{ color: '#09090b' }} />
+                <span style={{ color: '#09090b' }}>Open File</span>
               </button>
               <button
                 type="button"
                 onClick={() => onOpenFile(file.path, true)}
-                className="py-2.5 px-3 rounded-xl bg-white/[0.08] text-white font-medium hover:bg-white/[0.12] transition-colors border border-white/[0.1] flex items-center justify-center gap-1.5"
+                className="py-2.5 px-3.5 rounded-xl bg-white/[0.08] hover:bg-white/[0.14] text-white font-medium text-xs transition-colors border border-white/[0.1] flex items-center justify-center gap-1.5"
                 title="Show in Folder"
               >
                 <Folder className="w-3.5 h-3.5" />
@@ -307,6 +318,8 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
           </div>
         )}
       </div>
-    </aside>
+      </aside>
+    </>,
+    document.body
   );
 };
