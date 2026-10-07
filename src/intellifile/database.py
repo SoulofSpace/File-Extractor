@@ -33,8 +33,8 @@ CATEGORY_EXTS = {
 class Database:
     """SQLite persistence for application metadata, FTS full-text search, and OCR text."""
 
-    def __init__(self, path: Path) -> None:
-        self.path = path
+    def __init__(self, path: Path | str) -> None:
+        self.path = Path(path)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.initialize()
 
@@ -93,6 +93,7 @@ class Database:
             )
             self._migrate_v2(conn)
             self._migrate_v3(conn)
+            self._migrate_v4(conn)
 
     def _migrate_v2(self, conn: sqlite3.Connection) -> None:
         """Applies non-destructive V2 migrations for vector embeddings, pages, jobs, and history."""
@@ -240,6 +241,119 @@ class Database:
             CREATE INDEX IF NOT EXISTS idx_doc_und_hash ON document_understanding(content_hash);
 
             PRAGMA user_version = 3;
+            """
+        )
+
+    def _migrate_v4(self, conn: sqlite3.Connection) -> None:
+        """Applies non-destructive V4 migrations for Persons, Face Recognition, Privacy Engine, and Translation Cache."""
+        file_cols = {r["name"] for r in conn.execute("PRAGMA table_info(files)").fetchall()}
+        if "category_v4" not in file_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN category_v4 TEXT")
+        if "document_type" not in file_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN document_type TEXT")
+        if "capture_date" not in file_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN capture_date TEXT")
+        if "date_source" not in file_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN date_source TEXT")
+        if "privacy_state" not in file_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN privacy_state TEXT NOT NULL DEFAULT 'NORMAL'")
+        if "sensitivity_class" not in file_cols:
+            conn.execute("ALTER TABLE files ADD COLUMN sensitivity_class TEXT")
+
+        conn.executescript(
+            """
+            CREATE INDEX IF NOT EXISTS idx_files_privacy ON files(privacy_state);
+            CREATE INDEX IF NOT EXISTS idx_files_capture_date ON files(capture_date);
+            CREATE INDEX IF NOT EXISTS idx_files_cat_v4 ON files(category_v4);
+            CREATE INDEX IF NOT EXISTS idx_files_doc_type ON files(document_type);
+
+            CREATE TABLE IF NOT EXISTS persons (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                name TEXT NOT NULL,
+                is_cluster INTEGER NOT NULL DEFAULT 0,
+                cluster_label TEXT,
+                notes TEXT,
+                avatar_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+                created_at TEXT NOT NULL,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_persons_name ON persons(name);
+            CREATE INDEX IF NOT EXISTS idx_persons_cluster ON persons(is_cluster);
+
+            CREATE TABLE IF NOT EXISTS person_aliases (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                person_id INTEGER NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+                alias TEXT NOT NULL,
+                UNIQUE(person_id, alias)
+            );
+            CREATE INDEX IF NOT EXISTS idx_aliases_alias ON person_aliases(alias);
+
+            CREATE TABLE IF NOT EXISTS face_detections (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                box_x REAL NOT NULL,
+                box_y REAL NOT NULL,
+                box_w REAL NOT NULL,
+                box_h REAL NOT NULL,
+                confidence REAL NOT NULL,
+                embedding BLOB NOT NULL,
+                person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL,
+                match_confidence REAL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_face_file ON face_detections(file_id);
+            CREATE INDEX IF NOT EXISTS idx_face_person ON face_detections(person_id);
+
+            CREATE TABLE IF NOT EXISTS person_embeddings (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                person_id INTEGER NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+                source_file_id INTEGER REFERENCES files(id) ON DELETE SET NULL,
+                embedding BLOB NOT NULL,
+                is_reference INTEGER NOT NULL DEFAULT 1,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_person_emb_pid ON person_embeddings(person_id);
+
+            CREATE TABLE IF NOT EXISTS person_file_links (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                person_id INTEGER NOT NULL REFERENCES persons(id) ON DELETE CASCADE,
+                file_id INTEGER NOT NULL REFERENCES files(id) ON DELETE CASCADE,
+                link_type TEXT NOT NULL,
+                confidence REAL NOT NULL DEFAULT 1.0,
+                is_confirmed INTEGER NOT NULL DEFAULT 0,
+                notes TEXT,
+                created_at TEXT NOT NULL,
+                UNIQUE(person_id, file_id, link_type)
+            );
+            CREATE INDEX IF NOT EXISTS idx_pfl_person ON person_file_links(person_id);
+            CREATE INDEX IF NOT EXISTS idx_pfl_file ON person_file_links(file_id);
+
+            CREATE TABLE IF NOT EXISTS privacy_settings (
+                key TEXT PRIMARY KEY,
+                value TEXT NOT NULL
+            );
+
+            CREATE TABLE IF NOT EXISTS file_privacy (
+                file_id INTEGER PRIMARY KEY REFERENCES files(id) ON DELETE CASCADE,
+                privacy_state TEXT NOT NULL DEFAULT 'NORMAL',
+                sensitivity_class TEXT,
+                manual_override INTEGER NOT NULL DEFAULT 0,
+                updated_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_fp_state ON file_privacy(privacy_state);
+
+            CREATE TABLE IF NOT EXISTS translation_cache (
+                cache_key TEXT PRIMARY KEY,
+                original_query_hash TEXT NOT NULL,
+                translated_text TEXT NOT NULL,
+                model TEXT NOT NULL,
+                source_lang TEXT NOT NULL,
+                target_lang TEXT NOT NULL,
+                created_at TEXT NOT NULL
+            );
+            CREATE INDEX IF NOT EXISTS idx_tc_hash ON translation_cache(original_query_hash);
+
+            PRAGMA user_version = 4;
             """
         )
 
@@ -908,5 +1022,466 @@ class Database:
 
             scored_rows.sort(key=lambda x: (x["match_count"], x.get("id", 0)), reverse=True)
             return scored_rows[:limit]
+
+    # ── V4 Persons Management ──────────────────────────────────────────────────
+
+    def create_person(
+        self,
+        name: str,
+        aliases: Optional[List[str]] = None,
+        avatar_file_id: Optional[int] = None,
+        notes: str = "",
+        is_cluster: bool = False,
+        cluster_label: Optional[str] = None,
+    ) -> int:
+        now = self.now()
+        name_clean = name.strip()
+        with self.connection() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO persons (name, is_cluster, cluster_label, notes, avatar_file_id, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (name_clean, 1 if is_cluster else 0, cluster_label, notes, avatar_file_id, now, now),
+            )
+            person_id = cur.lastrowid
+            if aliases:
+                for a in aliases:
+                    alias_str = a.strip()
+                    if alias_str and alias_str.lower() != name_clean.lower():
+                        conn.execute(
+                            "INSERT OR IGNORE INTO person_aliases (person_id, alias) VALUES (?, ?)",
+                            (person_id, alias_str),
+                        )
+            return person_id
+
+    def get_person(self, person_id: int) -> Optional[dict]:
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+            if not row:
+                return None
+            p = dict(row)
+            alias_rows = conn.execute(
+                "SELECT alias FROM person_aliases WHERE person_id = ? ORDER BY alias", (person_id,)
+            ).fetchall()
+            p["aliases"] = [r["alias"] for r in alias_rows]
+            return p
+
+    def list_persons(self, include_clusters: bool = True, privacy_scope: str = "NORMAL") -> List[dict]:
+        where_clause = "" if include_clusters else "WHERE p.is_cluster = 0"
+        hidden_filter = "AND f.privacy_state != 'HIDDEN'" if privacy_scope != "PRIVATE" else ""
+        sql = f"""
+            SELECT p.*,
+                   COUNT(DISTINCT CASE WHEN pfl.link_type = 'face' {hidden_filter} THEN pfl.file_id END) AS photo_count,
+                   COUNT(DISTINCT CASE WHEN pfl.link_type IN ('ocr', 'filename', 'entity') {hidden_filter} THEN pfl.file_id END) AS doc_count,
+                   COUNT(DISTINCT CASE WHEN 1=1 {hidden_filter} THEN pfl.file_id END) AS total_files_count
+            FROM persons p
+            LEFT JOIN person_file_links pfl ON pfl.person_id = p.id
+            LEFT JOIN files f ON pfl.file_id = f.id
+            {where_clause}
+            GROUP BY p.id
+            ORDER BY p.is_cluster ASC, p.name COLLATE NOCASE ASC
+        """
+        with self.connection() as conn:
+            rows = conn.execute(sql).fetchall()
+            results = []
+            for r in rows:
+                p = dict(r)
+                aliases = conn.execute(
+                    "SELECT alias FROM person_aliases WHERE person_id = ? ORDER BY alias", (p["id"],)
+                ).fetchall()
+                p["aliases"] = [a["alias"] for a in aliases]
+                results.append(p)
+            return results
+
+    def update_person(
+        self,
+        person_id: int,
+        name: Optional[str] = None,
+        notes: Optional[str] = None,
+        avatar_file_id: Optional[int] = None,
+        is_cluster: Optional[bool] = None,
+    ) -> None:
+        now = self.now()
+        updates = ["updated_at = ?"]
+        params: List[Any] = [now]
+        if name is not None:
+            updates.append("name = ?")
+            params.append(name.strip())
+        if notes is not None:
+            updates.append("notes = ?")
+            params.append(notes)
+        if avatar_file_id is not None:
+            updates.append("avatar_file_id = ?")
+            params.append(avatar_file_id)
+        if is_cluster is not None:
+            updates.append("is_cluster = ?")
+            params.append(1 if is_cluster else 0)
+        params.append(person_id)
+
+        with self.connection() as conn:
+            conn.execute(f"UPDATE persons SET {', '.join(updates)} WHERE id = ?", params)
+
+    def delete_person(self, person_id: int) -> None:
+        """Deletes person identity, aliases, embeddings and file links. Does NOT delete original files."""
+        with self.connection() as conn:
+            conn.execute("UPDATE face_detections SET person_id = NULL WHERE person_id = ?", (person_id,))
+            conn.execute("DELETE FROM person_embeddings WHERE person_id = ?", (person_id,))
+            conn.execute("DELETE FROM person_file_links WHERE person_id = ?", (person_id,))
+            conn.execute("DELETE FROM person_aliases WHERE person_id = ?", (person_id,))
+            conn.execute("DELETE FROM persons WHERE id = ?", (person_id,))
+
+    def add_person_alias(self, person_id: int, alias: str) -> None:
+        alias_clean = alias.strip()
+        if not alias_clean:
+            return
+        with self.connection() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO person_aliases (person_id, alias) VALUES (?, ?)",
+                (person_id, alias_clean),
+            )
+
+    def remove_person_alias(self, person_id: int, alias: str) -> None:
+        with self.connection() as conn:
+            conn.execute(
+                "DELETE FROM person_aliases WHERE person_id = ? AND alias = ?",
+                (person_id, alias.strip()),
+            )
+
+    def find_person_by_name_or_alias(self, name_or_alias: str) -> Optional[dict]:
+        target = name_or_alias.strip().lower()
+        with self.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT p.* FROM persons p
+                LEFT JOIN person_aliases pa ON pa.person_id = p.id
+                WHERE LOWER(p.name) = ? OR LOWER(pa.alias) = ?
+                LIMIT 1
+                """,
+                (target, target),
+            ).fetchone()
+            if not row:
+                return None
+            return self.get_person(row["id"])
+
+    def merge_persons(self, source_person_id: int, target_person_id: int) -> None:
+        """Merges source person into target person (moves aliases, embeddings, links, face detections)."""
+        if source_person_id == target_person_id:
+            return
+        now = self.now()
+        with self.connection() as conn:
+            # Move aliases
+            conn.execute(
+                "UPDATE OR IGNORE person_aliases SET person_id = ? WHERE person_id = ?",
+                (target_person_id, source_person_id),
+            )
+            # Add source person's name as an alias for target person if not present
+            source_row = conn.execute("SELECT name FROM persons WHERE id = ?", (source_person_id,)).fetchone()
+            if source_row:
+                conn.execute(
+                    "INSERT OR IGNORE INTO person_aliases (person_id, alias) VALUES (?, ?)",
+                    (target_person_id, source_row["name"]),
+                )
+            # Move embeddings
+            conn.execute(
+                "UPDATE person_embeddings SET person_id = ? WHERE person_id = ?",
+                (target_person_id, source_person_id),
+            )
+            # Move face detections
+            conn.execute(
+                "UPDATE face_detections SET person_id = ? WHERE person_id = ?",
+                (target_person_id, source_person_id),
+            )
+            # Move file links
+            conn.execute(
+                "UPDATE OR IGNORE person_file_links SET person_id = ? WHERE person_id = ?",
+                (target_person_id, source_person_id),
+            )
+            conn.execute("DELETE FROM person_file_links WHERE person_id = ?", (source_person_id,))
+            conn.execute("DELETE FROM persons WHERE id = ?", (source_person_id,))
+            conn.execute("UPDATE persons SET updated_at = ? WHERE id = ?", (now, target_person_id))
+
+    def split_person(
+        self,
+        person_id: int,
+        new_person_name: str,
+        detection_ids: Optional[List[int]] = None,
+        file_ids: Optional[List[int]] = None,
+    ) -> int:
+        """Splits selected face detections or file links into a new person identity."""
+        new_pid = self.create_person(new_person_name)
+        with self.connection() as conn:
+            if detection_ids:
+                pl = ",".join("?" for _ in detection_ids)
+                conn.execute(
+                    f"UPDATE face_detections SET person_id = ? WHERE id IN ({pl}) AND person_id = ?",
+                    [new_pid] + list(detection_ids) + [person_id],
+                )
+            if file_ids:
+                pl = ",".join("?" for _ in file_ids)
+                conn.execute(
+                    f"UPDATE person_file_links SET person_id = ? WHERE file_id IN ({pl}) AND person_id = ?",
+                    [new_pid] + list(file_ids) + [person_id],
+                )
+        return new_pid
+
+    def name_cluster(self, cluster_id: int, person_name: str) -> int:
+        """Names an unknown cluster as an approved person identity."""
+        now = self.now()
+        with self.connection() as conn:
+            conn.execute(
+                "UPDATE persons SET name = ?, is_cluster = 0, updated_at = ? WHERE id = ?",
+                (person_name.strip(), now, cluster_id),
+            )
+        return cluster_id
+
+    # ── V4 Face Detections & Embeddings ───────────────────────────────────────
+
+    def add_face_detection(
+        self,
+        file_id: int,
+        box_x: float,
+        box_y: float,
+        box_w: float,
+        box_h: float,
+        confidence: float,
+        embedding: bytes,
+        person_id: Optional[int] = None,
+        match_confidence: Optional[float] = None,
+    ) -> int:
+        now = self.now()
+        with self.connection() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO face_detections (file_id, box_x, box_y, box_w, box_h, confidence, embedding, person_id, match_confidence, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                """,
+                (file_id, box_x, box_y, box_w, box_h, confidence, embedding, person_id, match_confidence, now),
+            )
+            return cur.lastrowid
+
+    def get_face_detections(
+        self, file_id: Optional[int] = None, person_id: Optional[int] = None
+    ) -> List[dict]:
+        with self.connection() as conn:
+            if file_id is not None:
+                rows = conn.execute(
+                    "SELECT * FROM face_detections WHERE file_id = ? ORDER BY id", (file_id,)
+                ).fetchall()
+            elif person_id is not None:
+                rows = conn.execute(
+                    "SELECT * FROM face_detections WHERE person_id = ? ORDER BY id", (person_id,)
+                ).fetchall()
+            else:
+                rows = conn.execute("SELECT * FROM face_detections ORDER BY id").fetchall()
+            return [dict(r) for r in rows]
+
+    def add_person_embedding(
+        self,
+        person_id: int,
+        embedding: bytes,
+        source_file_id: Optional[int] = None,
+        is_reference: bool = True,
+    ) -> int:
+        now = self.now()
+        with self.connection() as conn:
+            cur = conn.execute(
+                """
+                INSERT INTO person_embeddings (person_id, source_file_id, embedding, is_reference, created_at)
+                VALUES (?, ?, ?, ?, ?)
+                """,
+                (person_id, source_file_id, embedding, 1 if is_reference else 0, now),
+            )
+            return cur.lastrowid
+
+    def get_all_person_embeddings(self) -> List[dict]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT pe.*, p.name, p.is_cluster
+                FROM person_embeddings pe
+                JOIN persons p ON pe.person_id = p.id
+                """
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def link_person_to_file(
+        self,
+        person_id: int,
+        file_id: int,
+        link_type: str = "face",
+        confidence: float = 1.0,
+        is_confirmed: bool = False,
+        notes: str = "",
+    ) -> None:
+        now = self.now()
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO person_file_links (person_id, file_id, link_type, confidence, is_confirmed, notes, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(person_id, file_id, link_type) DO UPDATE SET
+                    confidence = MAX(confidence, excluded.confidence),
+                    is_confirmed = MAX(is_confirmed, excluded.is_confirmed),
+                    notes = CASE WHEN excluded.notes != '' THEN excluded.notes ELSE notes END
+                """,
+                (person_id, file_id, link_type, confidence, 1 if is_confirmed else 0, notes, now),
+            )
+
+    def get_person_files(self, person_id: int, privacy_scope: str = "NORMAL") -> List[dict]:
+        hidden_filter = "AND f.privacy_state != 'HIDDEN'" if privacy_scope != "PRIVATE" else ""
+        sql = f"""
+            SELECT f.*, pfl.link_type, pfl.confidence AS link_confidence, pfl.is_confirmed AS link_confirmed
+            FROM person_file_links pfl
+            JOIN files f ON pfl.file_id = f.id
+            WHERE pfl.person_id = ? {hidden_filter}
+            ORDER BY pfl.is_confirmed DESC, pfl.confidence DESC, f.id DESC
+        """
+        with self.connection() as conn:
+            rows = conn.execute(sql, (person_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_file_persons(self, file_id: int) -> List[dict]:
+        sql = """
+            SELECT p.*, pfl.link_type, pfl.confidence, pfl.is_confirmed
+            FROM person_file_links pfl
+            JOIN persons p ON pfl.person_id = p.id
+            WHERE pfl.file_id = ?
+            ORDER BY pfl.confidence DESC
+        """
+        with self.connection() as conn:
+            rows = conn.execute(sql, (file_id,)).fetchall()
+            return [dict(r) for r in rows]
+
+    # ── V4 Privacy Engine & Settings ───────────────────────────────────────────
+
+    def get_privacy_setting(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        with self.connection() as conn:
+            row = conn.execute("SELECT value FROM privacy_settings WHERE key = ?", (key,)).fetchone()
+            return row["value"] if row else default
+
+    def set_privacy_setting(self, key: str, value: str) -> None:
+        with self.connection() as conn:
+            conn.execute(
+                "INSERT INTO privacy_settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+                (key, str(value)),
+            )
+
+    def get_all_privacy_settings(self) -> Dict[str, str]:
+        with self.connection() as conn:
+            rows = conn.execute("SELECT key, value FROM privacy_settings").fetchall()
+            return {r["key"]: r["value"] for r in rows}
+
+    def update_file_privacy(
+        self,
+        file_id: int,
+        privacy_state: str,
+        sensitivity_class: Optional[str] = None,
+        manual: bool = False,
+    ) -> None:
+        now = self.now()
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT INTO file_privacy (file_id, privacy_state, sensitivity_class, manual_override, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON CONFLICT(file_id) DO UPDATE SET
+                    privacy_state = excluded.privacy_state,
+                    sensitivity_class = COALESCE(excluded.sensitivity_class, sensitivity_class),
+                    manual_override = excluded.manual_override,
+                    updated_at = excluded.updated_at
+                """,
+                (file_id, privacy_state.upper(), sensitivity_class, 1 if manual else 0, now),
+            )
+            # Synchronize to files table
+            conn.execute(
+                "UPDATE files SET privacy_state = ?, sensitivity_class = COALESCE(?, sensitivity_class) WHERE id = ?",
+                (privacy_state.upper(), sensitivity_class, file_id),
+            )
+
+    def get_file_privacy(self, file_id: int) -> dict:
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM file_privacy WHERE file_id = ?", (file_id,)).fetchone()
+            if row:
+                return dict(row)
+            f_row = conn.execute("SELECT privacy_state, sensitivity_class FROM files WHERE id = ?", (file_id,)).fetchone()
+            if f_row:
+                return {
+                    "file_id": file_id,
+                    "privacy_state": f_row["privacy_state"] or "NORMAL",
+                    "sensitivity_class": f_row["sensitivity_class"] or "None",
+                    "manual_override": 0,
+                }
+            return {"file_id": file_id, "privacy_state": "NORMAL", "sensitivity_class": "None", "manual_override": 0}
+
+    def update_file_v4_metadata(
+        self,
+        file_id: int,
+        category_v4: Optional[str] = None,
+        document_type: Optional[str] = None,
+        capture_date: Optional[str] = None,
+        date_source: Optional[str] = None,
+        sensitivity_class: Optional[str] = None,
+        privacy_state: Optional[str] = None,
+    ) -> None:
+        updates = []
+        params = []
+        if category_v4 is not None:
+            updates.append("category_v4 = ?")
+            params.append(category_v4)
+        if document_type is not None:
+            updates.append("document_type = ?")
+            params.append(document_type)
+        if capture_date is not None:
+            updates.append("capture_date = ?")
+            params.append(capture_date)
+        if date_source is not None:
+            updates.append("date_source = ?")
+            params.append(date_source)
+        if sensitivity_class is not None:
+            updates.append("sensitivity_class = ?")
+            params.append(sensitivity_class)
+        if privacy_state is not None:
+            updates.append("privacy_state = ?")
+            params.append(privacy_state.upper())
+        if not updates:
+            return
+        params.append(file_id)
+        with self.connection() as conn:
+            conn.execute(f"UPDATE files SET {', '.join(updates)} WHERE id = ?", params)
+
+    # ── V4 Sarvam Translation Cache ───────────────────────────────────────────
+
+    def get_translation_cache(self, cache_key: str) -> Optional[str]:
+        with self.connection() as conn:
+            row = conn.execute(
+                "SELECT translated_text FROM translation_cache WHERE cache_key = ?", (cache_key,)
+            ).fetchone()
+            return row["translated_text"] if row else None
+
+    def set_translation_cache(
+        self,
+        cache_key: str,
+        original_query_hash: str,
+        translated_text: str,
+        model: str,
+        source_lang: str,
+        target_lang: str,
+    ) -> None:
+        now = self.now()
+        with self.connection() as conn:
+            conn.execute(
+                """
+                INSERT OR REPLACE INTO translation_cache
+                (cache_key, original_query_hash, translated_text, model, source_lang, target_lang, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?)
+                """,
+                (cache_key, original_query_hash, translated_text, model, source_lang, target_lang, now),
+            )
+
+    def clear_translation_cache(self) -> int:
+        with self.connection() as conn:
+            cur = conn.execute("DELETE FROM translation_cache")
+            return cur.rowcount
 
 

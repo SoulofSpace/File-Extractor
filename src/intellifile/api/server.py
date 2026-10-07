@@ -37,10 +37,15 @@ from intellifile.embedding_provider import SentenceTransformerProvider
 from intellifile.ai_agent import AIAgent
 from intellifile.scanner import ScanWorker
 from intellifile.models import SUPPORTED_EXTENSIONS, VIDEO_EXTENSIONS, classify_video
-from PIL import Image
+from intellifile.person_service import PersonService
+from intellifile.sarvam_service import SarvamService
+from intellifile.privacy_engine import PrivacyEngine
+from intellifile.universal_query_planner import UniversalQueryPlanner
+from fastapi import UploadFile, File
+from PIL import Image, ImageFilter
 
 # Initialize core services
-app = FastAPI(title="FILE XTRACTOR Core API", version="3.0.0")
+app = FastAPI(title="FILE XTRACTOR Core API", version="4.0.0")
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,6 +60,10 @@ _db: Optional[Database] = None
 _vector_store: Optional[SQLiteFlatVectorStore] = None
 _embed_provider: Optional[SentenceTransformerProvider] = None
 _agent: Optional[AIAgent] = None
+_person_service: Optional[PersonService] = None
+_sarvam_service: Optional[SarvamService] = None
+_privacy_engine: Optional[PrivacyEngine] = None
+_universal_planner: Optional[UniversalQueryPlanner] = None
 
 # Indexing status tracking
 _indexing_lock = threading.Lock()
@@ -70,16 +79,24 @@ _indexing_status = {
 
 
 def get_services():
-    global _db, _vector_store, _embed_provider, _agent
+    global _db, _vector_store, _embed_provider, _agent, _person_service, _sarvam_service, _privacy_engine, _universal_planner
     if _db is None:
         db_p = database_path()
         _db = Database(db_p)
         _vector_store = SQLiteFlatVectorStore(db_p)
         _embed_provider = SentenceTransformerProvider()
+        _person_service = PersonService(_db)
+        _sarvam_service = SarvamService(_db)
+        _privacy_engine = PrivacyEngine(_db)
+        _universal_planner = UniversalQueryPlanner(_db)
         _agent = AIAgent(
             _db,
             embedding_provider=_embed_provider,
             vector_store=_vector_store,
+            universal_query_planner=_universal_planner,
+            person_service=_person_service,
+            sarvam_service=_sarvam_service,
+            privacy_engine=_privacy_engine,
         )
     return _db, _agent
 
@@ -93,11 +110,15 @@ class SearchRequest(BaseModel):
     sort_by: Optional[str] = "relevance"     # "relevance", "date_desc", "date_asc", "size_desc", "size_asc", "name"
     limit: Optional[int] = 60
     save_history: Optional[bool] = True
+    privacy_token: Optional[str] = None
+    privacy_scope: Optional[str] = "NORMAL"
 
 
 class OpenFileRequest(BaseModel):
     path: str
     reveal: Optional[bool] = False
+    privacy_token: Optional[str] = None
+    password: Optional[str] = None
 
 
 class AddFolderRequest(BaseModel):
@@ -107,6 +128,55 @@ class AddFolderRequest(BaseModel):
 class SavedSearchRequest(BaseModel):
     query: str
     name: Optional[str] = None
+
+
+class CreatePersonRequest(BaseModel):
+    name: str
+    aliases: Optional[List[str]] = None
+    reference_image_paths: Optional[List[str]] = None
+    notes: Optional[str] = ""
+
+
+class UpdatePersonRequest(BaseModel):
+    name: Optional[str] = None
+    notes: Optional[str] = None
+    aliases: Optional[List[str]] = None
+
+
+class MergePersonRequest(BaseModel):
+    target_person_id: int
+
+
+class SplitPersonRequest(BaseModel):
+    new_person_name: str
+    detection_ids: Optional[List[int]] = None
+    file_ids: Optional[List[int]] = None
+
+
+class NameClusterRequest(BaseModel):
+    name: str
+
+
+class PasswordSetupRequest(BaseModel):
+    password: str
+
+
+class PasswordVerifyRequest(BaseModel):
+    password: str
+
+
+class PasswordRecoverRequest(BaseModel):
+    recovery_key: str
+    new_password: str
+
+
+class PrivacySettingsUpdateRequest(BaseModel):
+    settings: Dict[str, str]
+
+
+class UpdateFilePrivacyRequest(BaseModel):
+    privacy_state: str
+    privacy_token: Optional[str] = None
 
 
 # ── Health & System Status Endpoints ──────────────────────────────────────────
@@ -169,6 +239,10 @@ def search_files(req: SearchRequest):
     db, agent = get_services()
     t0 = time.perf_counter()
 
+    pe = agent.privacy_engine
+    is_auth = pe.validate_session(req.privacy_token) if pe and req.privacy_token else False
+    p_scope = "PRIVATE" if is_auth else (req.privacy_scope or "NORMAL")
+
     query_text = (req.query or "").strip()
     cat_filter = None if (not req.category or req.category.upper() == "ALL") else req.category.lower()
 
@@ -176,7 +250,17 @@ def search_files(req: SearchRequest):
     if not query_text or query_text == "*":
         cat_db = cat_filter.capitalize() if cat_filter else None
         recent_hits = db.get_recent_files(category=cat_db, limit=max(req.limit or 60, 60))
-        raw_results = recent_hits
+        # Enforce privacy scope & sanitization on broad browse
+        scoped_hits = []
+        for r in recent_hits:
+            p_state = (r.get("privacy_state") or "NORMAL").upper()
+            if p_state == "HIDDEN" and not is_auth:
+                continue
+            scoped_hits.append(r)
+        if pe:
+            raw_results = pe.sanitize_results(scoped_hits, is_authenticated=is_auth)
+        else:
+            raw_results = scoped_hits
     else:
         # Execute search via AIAgent
         raw_results = agent.search(
@@ -184,6 +268,9 @@ def search_files(req: SearchRequest):
             user_category=cat_filter,
             limit=max(req.limit or 60, 60),
             debug=False,
+            privacy_scope=p_scope,
+            is_authenticated=is_auth,
+            privacy_token=req.privacy_token,
         )
 
     # Normalize all fields on each result dictionary for frontend reliability
@@ -293,19 +380,39 @@ def search_files(req: SearchRequest):
 # ── File Details & Preview Endpoint ───────────────────────────────────────────
 
 @app.get("/api/file/{file_id}")
-def get_file_detail(file_id: int):
-    db, _ = get_services()
+def get_file_detail(file_id: int, privacy_token: Optional[str] = None):
+    db, agent = get_services()
+    pe = agent.privacy_engine
+    is_auth = pe.validate_session(privacy_token) if pe and privacy_token else False
+
     record = db.get_file_by_id(file_id)
     if not record:
         raise HTTPException(status_code=404, detail="File record not found")
 
-    res = dict(record)
+    p_state = (record.get("privacy_state") or "NORMAL").upper()
+    if p_state == "HIDDEN" and not is_auth:
+        raise HTTPException(status_code=404, detail="File record not found")
 
-    # Attach document understanding if present
+    res = dict(record)
+    if p_state == "PROTECTED" and not is_auth:
+        res["is_locked"] = True
+        res["is_protected"] = True
+        res["snippet"] = "[Protected content - Enter password to view]"
+        res["ocr_text"] = ""
+        res["extracted_text"] = ""
+        if pe and db.get_privacy_setting("hide_protected_filename", "true") == "true":
+            ext = res.get("extension", "")
+            res["filename"] = f"Protected Document{ext}" if res.get("file_type") == "document" else f"Protected File{ext}"
+    else:
+        res["is_locked"] = False
+        res["is_protected"] = (p_state in ("PROTECTED", "HIDDEN"))
+
+    # Attach document understanding if present and permitted
     try:
-        doc_und = db.get_document_understanding(file_id)
-        if doc_und:
-            res["document_understanding"] = doc_und
+        if not (p_state == "PROTECTED" and not is_auth):
+            doc_und = db.get_document_understanding(file_id)
+            if doc_und:
+                res["document_understanding"] = doc_und
     except Exception:
         pass
 
@@ -321,10 +428,17 @@ def get_file_detail(file_id: int):
 # ── Thumbnail Streaming Endpoint ──────────────────────────────────────────────
 
 @app.get("/api/thumbnail/{file_id}")
-def get_file_thumbnail(file_id: int, size: int = 360):
-    db, _ = get_services()
+def get_file_thumbnail(file_id: int, size: int = 360, privacy_token: Optional[str] = None):
+    db, agent = get_services()
+    pe = agent.privacy_engine
+    is_auth = pe.validate_session(privacy_token) if pe and privacy_token else False
+
     record = db.get_file_by_id(file_id)
     if not record:
+        raise HTTPException(status_code=404, detail="File not found")
+
+    p_state = (record.get("privacy_state") or "NORMAL").upper()
+    if p_state == "HIDDEN" and not is_auth:
         raise HTTPException(status_code=404, detail="File not found")
 
     file_path = Path(record.get("path", ""))
@@ -339,11 +453,21 @@ def get_file_thumbnail(file_id: int, size: int = 360):
             # Generate thumbnail in memory for fast local rendering
             with Image.open(file_path) as img:
                 img.thumbnail((size, size), Image.Resampling.LANCZOS)
+                # If protected and unauthenticated, apply blur or hide
+                if p_state == "PROTECTED" and not is_auth:
+                    preview_mode = db.get_privacy_setting("protected_image_preview", "blur")
+                    if preview_mode == "hide":
+                        raise HTTPException(status_code=403, detail="Protected image preview is hidden")
+                    else:  # blur
+                        img = img.filter(ImageFilter.GaussianBlur(radius=20))
+
                 buf = io.BytesIO()
                 # Always save as WebP / JPEG for high compression & speed
                 img.convert("RGB").save(buf, format="JPEG", quality=85)
                 buf.seek(0)
                 return Response(content=buf.getvalue(), media_type="image/jpeg")
+        except HTTPException:
+            raise
         except Exception:
             # Fallback to direct file stream if PIL fails
             return FileResponse(file_path)
@@ -522,6 +646,27 @@ def delete_saved_search(search_id: int):
 
 @app.post("/api/open-file")
 def open_local_file(req: OpenFileRequest):
+    db, agent = get_services()
+    pe = agent.privacy_engine
+
+    # Check file privacy state
+    f_rec = db.get_file_by_path(req.path)
+    if f_rec:
+        p_state = (f_rec.get("privacy_state") or "NORMAL").upper()
+        if p_state in ("PROTECTED", "HIDDEN"):
+            is_auth = False
+            if req.privacy_token and pe and pe.validate_session(req.privacy_token):
+                is_auth = True
+            elif req.password and pe:
+                ok, _, _ = pe.verify_password(req.password)
+                if ok:
+                    is_auth = True
+            if not is_auth:
+                raise HTTPException(
+                    status_code=403,
+                    detail=f"This file is {p_state.title()}. Privacy password is required to open it.",
+                )
+
     p = Path(req.path).resolve()
     if not p.exists():
         raise HTTPException(status_code=404, detail="File does not exist on disk")
@@ -545,6 +690,240 @@ def open_local_file(req: OpenFileRequest):
             return {"status": "opened", "path": str(p)}
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Failed to open file: {e}")
+
+
+# ── Persons Section Endpoints (Requirements 5, 6, 9, 10, 11) ─────────────────
+
+@app.get("/api/persons")
+def list_persons(
+    include_clusters: bool = True,
+    privacy_token: Optional[str] = None,
+):
+    db, agent = get_services()
+    pe = agent.privacy_engine
+    is_auth = pe.validate_session(privacy_token) if pe and privacy_token else False
+    scope = "PRIVATE" if is_auth else "NORMAL"
+    persons = db.list_persons(include_clusters=include_clusters, privacy_scope=scope)
+    return {"persons": persons, "total": len(persons)}
+
+
+@app.post("/api/persons")
+def create_person(req: CreatePersonRequest):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    pid = ps.create_person_with_photos(
+        name=req.name,
+        aliases=req.aliases,
+        reference_image_paths=req.reference_image_paths,
+        notes=req.notes or "",
+    )
+    person = agent.database.get_person(pid)
+    return {"status": "created", "person": person}
+
+
+@app.get("/api/persons/{person_id}")
+def get_person(
+    person_id: int,
+    privacy_token: Optional[str] = None,
+):
+    _, agent = get_services()
+    ps = agent.person_service
+    pe = agent.privacy_engine
+    is_auth = pe.validate_session(privacy_token) if pe and privacy_token else False
+    scope = "PRIVATE" if is_auth else "NORMAL"
+    details = ps.get_person_details(person_id, privacy_scope=scope) if ps else None
+    if not details:
+        raise HTTPException(status_code=404, detail="Person not found")
+    return details
+
+
+@app.put("/api/persons/{person_id}")
+def update_person(person_id: int, req: UpdatePersonRequest):
+    db, _ = get_services()
+    if req.name:
+        db.update_person(person_id, name=req.name)
+    if req.notes is not None:
+        db.update_person(person_id, notes=req.notes)
+    if req.aliases is not None:
+        with db.connection() as conn:
+            conn.execute("DELETE FROM person_aliases WHERE person_id = ?", (person_id,))
+        for a in req.aliases:
+            db.add_person_alias(person_id, a)
+    updated = db.get_person(person_id)
+    return {"status": "updated", "person": updated}
+
+
+@app.delete("/api/persons/{person_id}")
+def delete_person(person_id: int):
+    _, agent = get_services()
+    ps = agent.person_service
+    if ps:
+        ps.delete_person(person_id)
+    return {"status": "deleted", "id": person_id}
+
+
+@app.post("/api/persons/{person_id}/merge")
+def merge_persons(person_id: int, req: MergePersonRequest):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    ps.merge_persons(person_id, req.target_person_id)
+    merged = agent.database.get_person(req.target_person_id)
+    return {"status": "merged", "person": merged}
+
+
+@app.post("/api/persons/{person_id}/split")
+def split_person(person_id: int, req: SplitPersonRequest):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    new_pid = ps.split_person(
+        person_id,
+        new_person_name=req.new_person_name,
+        detection_ids=req.detection_ids,
+        file_ids=req.file_ids,
+    )
+    new_person = agent.database.get_person(new_pid)
+    return {"status": "split", "person": new_person}
+
+
+@app.post("/api/persons/cluster/{cluster_id}/name")
+def name_cluster(cluster_id: int, req: NameClusterRequest):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    pid = ps.name_cluster(cluster_id, req.name)
+    person = agent.database.get_person(pid)
+    return {"status": "named", "person": person}
+
+
+# ── Voice Search (Requirements 21, 22) ───────────────────────────────────────
+
+@app.post("/api/voice-search")
+async def voice_search(
+    file: Optional[UploadFile] = None,
+    privacy_token: Optional[str] = None,
+):
+    _, agent = get_services()
+    ss = agent.sarvam_service
+    if not ss or not ss.is_configured:
+        raise HTTPException(
+            status_code=503,
+            detail="Voice search requires SARVAM_API_KEY to be set in environment or settings.",
+        )
+
+    if not file:
+        raise HTTPException(status_code=400, detail="No audio file uploaded")
+    audio_bytes = await file.read()
+    if not audio_bytes:
+        raise HTTPException(status_code=400, detail="Uploaded audio file was empty")
+
+    mime_type = file.content_type or "audio/wav"
+    transcript = ss.transcribe_speech(audio_bytes, mime_type=mime_type, mode="translate")
+    if not transcript or not transcript.strip():
+        raise HTTPException(status_code=422, detail="Speech could not be transcribed.")
+
+    return {"transcript": transcript.strip(), "language": "en"}
+
+
+# ── Privacy Center Endpoints (Requirements 26-37) ─────────────────────────────
+
+@app.get("/api/privacy/status")
+def privacy_status(privacy_token: Optional[str] = None):
+    _, agent = get_services()
+    pe = agent.privacy_engine
+    is_conf = pe.is_password_configured() if pe else False
+    is_unlocked = pe.validate_session(privacy_token) if pe and privacy_token else False
+    return {
+        "is_configured": is_conf,
+        "is_unlocked": is_unlocked,
+    }
+
+
+@app.post("/api/privacy/setup")
+def privacy_setup(req: PasswordSetupRequest):
+    _, agent = get_services()
+    pe = agent.privacy_engine
+    if not pe:
+        raise HTTPException(status_code=500, detail="PrivacyEngine not initialized")
+    try:
+        rec_key = pe.setup_password(req.password)
+        ok, token, _ = pe.verify_password(req.password)
+        return {
+            "status": "configured",
+            "recovery_key": rec_key,
+            "token": token,
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/privacy/verify")
+def privacy_verify(req: PasswordVerifyRequest):
+    _, agent = get_services()
+    pe = agent.privacy_engine
+    if not pe:
+        raise HTTPException(status_code=500, detail="PrivacyEngine not initialized")
+    ok, token, msg = pe.verify_password(req.password)
+    if not ok:
+        raise HTTPException(status_code=401, detail=msg)
+    return {"status": "authenticated", "token": token, "message": msg}
+
+
+@app.post("/api/privacy/recover")
+def privacy_recover(req: PasswordRecoverRequest):
+    _, agent = get_services()
+    pe = agent.privacy_engine
+    if not pe:
+        raise HTTPException(status_code=500, detail="PrivacyEngine not initialized")
+    ok, msg = pe.verify_recovery_key(req.recovery_key, req.new_password)
+    if not ok:
+        raise HTTPException(status_code=400, detail=msg)
+    _, token, _ = pe.verify_password(req.new_password)
+    return {"status": "recovered", "token": token, "message": msg}
+
+
+@app.post("/api/privacy/lock")
+def privacy_lock(privacy_token: Optional[str] = None):
+    _, agent = get_services()
+    pe = agent.privacy_engine
+    if pe and privacy_token:
+        pe.revoke_session(privacy_token)
+    return {"status": "locked"}
+
+
+@app.get("/api/privacy/settings")
+def get_privacy_settings():
+    db, _ = get_services()
+    return db.get_all_privacy_settings()
+
+
+@app.put("/api/privacy/settings")
+def update_privacy_settings(req: PrivacySettingsUpdateRequest):
+    db, _ = get_services()
+    for k, v in req.settings.items():
+        db.set_privacy_setting(k, str(v))
+    return {"status": "saved", "settings": db.get_all_privacy_settings()}
+
+
+@app.post("/api/files/{file_id}/privacy")
+def update_file_privacy(file_id: int, req: UpdateFilePrivacyRequest):
+    db, agent = get_services()
+    pe = agent.privacy_engine
+    if pe and pe.is_password_configured():
+        if not pe.validate_session(req.privacy_token):
+            raise HTTPException(status_code=403, detail="Password authentication required to change file privacy.")
+    db.update_file_privacy(
+        file_id=file_id,
+        privacy_state=req.privacy_state.upper(),
+        manual=True,
+    )
+    return {"status": "updated", "file_id": file_id, "privacy_state": req.privacy_state.upper()}
 
 
 # ── Mount Built Frontend SPA (if present) ────────────────────────────────────

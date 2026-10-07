@@ -1,0 +1,1589 @@
+<USER_REQUEST>
+You are upgrading an existing application called FILE XTRACTOR from V3 to V4.
+
+Do NOT rebuild the application from scratch.
+Do NOT remove or break existing V3 functionality.
+First inspect the complete repository and understand the current architecture before making changes.
+
+The existing application includes a React/Electron frontend, FastAPI backend, local Qwen3.5-4B Q4_K_M through llama.cpp, BM25, SBERT, CLIP, OCR, SQLite/vector storage, incremental indexing, filesystem watching, duplicate detection, search history and provider abstractions.
+
+The goal is to extend this architecture into V4.
+
+==================================================
+1. V4 CORE OBJECTIVE
+==================================================
+
+V4 should make FILE XTRACTOR capable of:
+
+- context-aware person/entity search
+- date and date-range search
+- file-type/category search
+- person + date + type combinations
+- multilingual search
+- Romanized/code-mixed Indian-language search
+- voice search
+- local person management through a Persons section
+- configurable privacy protection
+- protected and hidden files
+- password-based access to protected content
+
+The existing local AI and hybrid retrieval system remains the core engine.
+
+==================================================
+2. EXISTING V3 SYSTEM MUST REMAIN
+==================================================
+
+Preserve:
+
+- BM25
+- SBERT
+- CLIP
+- OCR
+- metadata indexing
+- vector storage
+- local Qwen
+- incremental indexing
+- filesystem watcher
+- duplicate detection
+- search history
+- existing API structure
+- existing frontend architecture
+- existing provider abstractions
+
+Do not replace hybrid retrieval with an LLM-only architecture.
+
+==================================================
+3. FINAL HIGH-LEVEL ARCHITECTURE
+==================================================
+
+USER
+ │
+ ├── Text Search
+ │
+ └── Voice Search
+        │
+        ↓
+INPUT PROCESSING
+ │
+ ├── English/simple text → local processing
+ │
+ ├── Indic/code-mixed text → Sarvam Mayura when needed
+ │
+ └── Voice → Sarvam Saaras
+        │
+        ↓
+UNIVERSAL QUERY PLANNER
+        │
+        ↓
+STRUCTURED SEARCH PLAN
+        │
+        ↓
+PRIVACY ACCESS SCOPE
+        │
+        ↓
+HYBRID RETRIEVAL
+ │
+ ├── Metadata
+ ├── BM25
+ ├── SBERT
+ ├── CLIP
+ └── Person/Entity Index
+        │
+        ↓
+LOCAL QWEN
+ only when useful
+        │
+        ↓
+RESULT SANITIZER
+        │
+        ↓
+FRONTEND RESULTS
+
+Sarvam must NOT become the main search engine.
+
+==================================================
+4. UNIVERSAL QUERY PLANNER
+==================================================
+
+Create a Universal Query Planner.
+
+Its job is to convert a user's request into structured search constraints.
+
+Possible fields:
+
+- intent
+- person
+- entity
+- aliases
+- date
+- date range
+- file type
+- category
+- keywords
+- visual concepts
+- semantic concepts
+
+Example:
+
+"show me Raghul's photos from 9 Dec"
+
+becomes approximately:
+
+{
+    "intent": "search",
+    "persons": ["Raghul"],
+    "date": {
+        "start": "...",
+        "end": "..."
+    },
+    "file_types": ["image"],
+    "categories": [],
+    "keywords": [],
+    "visual_concepts": []
+}
+
+The Query Planner must NOT perform retrieval.
+
+Implement the planner using:
+
+1. deterministic/local rules for simple constraints
+2. local Qwen only when semantic ambiguity requires it
+
+Do not use Sarvam or another cloud LLM for query planning.
+
+==================================================
+5. PERSONS SECTION
+==================================================
+
+Add a new main sidebar section:
+
+Home
+Search
+Persons
+Documents
+Images
+Settings
+
+Persons is a complete V4 feature, not just a UI page.
+
+The Persons page should contain:
+
+- known people
+- unknown face clusters
+- person creation
+- person profiles
+- aliases
+- merge
+- split
+- rename
+- delete
+
+Example:
+
+Persons
+
+Raghul
+Arun
+Priya
+Unknown Person 1
+
+==================================================
+6. PERSON CREATION
+==================================================
+
+Allow the user to create a person.
+
+Flow:
+
+Add Person
+→ enter name
+→ select reference photos
+→ detect face
+→ generate local face embeddings
+→ create Person profile
+
+Allow multiple reference photos per person.
+
+Store multiple representative embeddings where useful.
+
+The user must explicitly create/approve a person identity.
+
+==================================================
+7. PRIVACY-FIRST PERSON INDEXING
+==================================================
+
+Face/person indexing must be user-configurable.
+
+Add a setting:
+
+Person/Face Indexing: ON/OFF
+
+When OFF:
+
+- do not perform face recognition
+- do not build person embeddings
+- normal image indexing still works
+
+When ON:
+
+- process faces locally
+- create embeddings locally
+- match against known people
+
+Never send face images or face embeddings to Sarvam.
+
+==================================================
+8. FACE DETECTION AND PERSON MATCHING
+==================================================
+
+Use a dedicated local face detection + face embedding model.
+
+It must:
+
+- run locally
+- support CPU fallback
+- optionally use GPU where available
+- not depend on cloud APIs
+
+Do NOT rely on Qwen alone for identity matching.
+
+Qwen may provide visual understanding, but face identity must use the dedicated face embedding pipeline.
+
+Use confidence thresholds.
+
+HIGH CONFIDENCE:
+automatically associate
+
+MEDIUM CONFIDENCE:
+possible match / user review
+
+LOW CONFIDENCE:
+do not associate
+
+Do not silently assign uncertain identities.
+
+==================================================
+9. UNKNOWN PEOPLE
+==================================================
+
+During indexing, faces that do not match known people may be grouped into unknown clusters.
+
+Example:
+
+Unknown Person 1
+Unknown Person 2
+
+The user can select:
+
+Unknown Person 1
+→ Name: Raghul
+→ Save
+
+The system then associates the approved person identity with that face cluster.
+
+==================================================
+10. PERSON MERGE/SPLIT
+==================================================
+
+Support:
+
+Merge Person
+Split Person
+Rename Person
+Add Alias
+Delete Person
+
+Example:
+
+Raghul
++
+Raghul 2
+→ Merge
+→ Raghul
+
+If different people were incorrectly grouped:
+
+Raghul
+→ Split
+→ Raghul
+→ Person 2
+
+Do not delete the original files when deleting a person identity.
+
+==================================================
+11. PERSON ALIASES
+==================================================
+
+Support aliases.
+
+Example:
+
+Primary:
+Raghul Kumar
+
+Aliases:
+Raghul
+Rahul
+R. Kumar
+
+Searches for aliases should resolve to the same Person ID.
+
+==================================================
+12. PERSON ENTITY MODEL
+==================================================
+
+A person is not defined only by face matches.
+
+Use multiple signals:
+
+- face match
+- OCR name match
+- document text
+- filename
+- metadata
+- aliases
+- semantic relationships
+
+Distinguish:
+
+DIRECT:
+high-confidence face match
+explicit name mention
+explicit relationship
+
+RELATED:
+strong semantic/contextual relationship
+
+Do not present weak semantic relationships as confirmed identity.
+
+==================================================
+13. PERSON SEARCH
+==================================================
+
+When a user searches:
+
+"Raghul"
+
+do not simply search for the string "Raghul".
+
+Resolve the person/entity first.
+
+Then search:
+
+- photos containing Raghul
+- documents mentioning Raghul
+- OCR containing Raghul
+- filenames containing Raghul/aliases
+- associated metadata
+- direct entity relationships
+- strong related files
+
+Example:
+
+"show me everything related to Raghul"
+
+should return relevant:
+
+Photos
+Documents
+OCR results
+Entity-linked files
+Other high-confidence related files
+
+==================================================
+14. MULTIPLE PEOPLE IN IMAGE
+==================================================
+
+A single image may contain multiple people.
+
+Store multiple person associations.
+
+Example:
+
+IMG_001.jpg
+→ Raghul
+→ Arun
+→ Priya
+
+Searching for any of those people should be able to retrieve the image.
+
+==================================================
+15. PERSON INDEXING PIPELINE
+==================================================
+
+During indexing:
+
+FILE
+ ↓
+Content/hash check
+ ↓
+If unchanged:
+reuse previous analysis
+ ↓
+If changed:
+process file
+ ↓
+Metadata + OCR + document/image understanding
+ ↓
+For images/videos where enabled:
+Face Detection
+ ↓
+Face Embedding
+ ↓
+Person Matching
+ ↓
+Person/Entity Linking
+ ↓
+Search Indexes
+
+Do not recompute unchanged face embeddings.
+
+==================================================
+16. DATE-AWARE SEARCH
+==================================================
+
+Support:
+
+"show me pics from 9 Dec"
+
+"photos from December 2025"
+
+"files from last Monday"
+
+"documents between 5 and 10 December"
+
+"Raghul's photos from 9 Dec"
+
+Resolve natural date expressions into actual date ranges.
+
+Do not blindly assume the year for an incomplete date.
+
+For images, prefer:
+
+1. EXIF capture date
+2. reliable filesystem metadata
+3. import/index date
+
+Store the date source.
+
+Do not incorrectly call file modification date the capture date.
+
+==================================================
+17. FILE TYPE/CATEGORY SEARCH
+==================================================
+
+Support:
+
+"show PDFs about DBMS"
+
+"show images from 9 Dec"
+
+"show Raghul's documents"
+
+"show bank statements from September"
+
+Categories:
+
+- Personal
+- Banking & Finance
+- IDs & Documents
+- Personal Photos
+- Education
+- Work
+- Travel
+- Other
+
+Document types can include:
+
+- Bank Statement
+- Invoice
+- Aadhaar
+- PAN
+- Passport
+- Driving Licence
+- College ID
+- Certificate
+- Resume
+- Assignment
+- Report
+- Presentation
+
+Store this as metadata.
+
+Do not create physical folders.
+
+==================================================
+18. SARVAM MULTILINGUAL SEARCH
+==================================================
+
+Use Sarvam Mayura v1 for multilingual text search.
+
+At implementation time, verify the currently supported model ID and SDK method against the current Sarvam documentation.
+
+Use:
+
+source_language_code = "auto"
+target_language_code = "en-IN"
+
+Use an appropriate colloquial/code-mixed mode for search queries.
+
+Examples:
+
+"ராகுலின் புகைப்படங்களைக் காட்டு"
+
+"राहुल की तस्वीरें दिखाओ"
+
+"Raghul oda photos"
+
+"9 Dec ke photos"
+
+"blue shirt போட்ட guy"
+
+The Sarvam request is only for the short user query.
+
+Do NOT send:
+
+- full files
+- images
+- OCR dumps
+- face embeddings
+- document contents
+
+to Sarvam for this feature.
+
+==================================================
+19. MINIMIZE SARVAM CALLS
+==================================================
+
+Do NOT call Sarvam for every search.
+
+English/simple query:
+→ no Sarvam
+
+Likely multilingual/code-mixed query:
+→ one Mayura call when necessary
+
+Use local heuristics/script detection and existing application context to decide when Sarvam is necessary.
+
+For Romanized/code-mixed Latin-script queries, test direct Mayura handling first.
+
+Do not automatically add:
+Language ID API
++
+Transliteration API
++
+Translation API
+
+as a mandatory pipeline.
+
+Only add another API later if testing demonstrates a concrete failure that cannot be solved locally.
+
+Cache successful translations locally.
+
+Do not retain sensitive plaintext queries unnecessarily in the cache.
+
+==================================================
+20. SARVAM TRANSLATION CACHE
+==================================================
+
+Cache using a stable key such as:
+
+hash(
+  original_query
+  + model
+  + target_language
+  + mode
+)
+
+Do not expose cached query text in logs.
+
+Provide a way to clear the translation cache.
+
+==================================================
+21. VOICE SEARCH
+==================================================
+
+Add a microphone button to the existing search bar.
+
+Use Sarvam Saaras v4 for voice search.
+
+At implementation time, verify the current model ID and request shape against the live Sarvam documentation.
+
+Preferred flow:
+
+Voice
+ ↓
+Saaras v4
+ ↓
+mode="translate"
+ ↓
+English query
+ ↓
+Universal Query Planner
+ ↓
+Existing search
+
+This avoids a second Sarvam translation call.
+
+Use automatic language detection when the language is unknown.
+
+Short search audio should use the synchronous REST STT path.
+
+Delete temporary audio after transcription.
+
+Do not save recordings by default.
+
+==================================================
+22. VOICE SEARCH EXAMPLES
+==================================================
+
+English:
+
+"Show me Raghul's photos from 9 December"
+
+Tamil:
+
+"டிசம்பர் ஒன்பதாம் தேதி ராகுலின் புகைப்படங்களைக் காட்டு"
+
+Hindi:
+
+"दिसंबर नौ की राहुल की तस्वीरें दिखाओ"
+
+Code-mixed:
+
+"Raghul oda 9 Dec photos kaatu"
+
+All should ultimately enter the same Query Planner.
+
+==================================================
+23. LOCAL QWEN
+==================================================
+
+Keep:
+
+Qwen3.5-4B Q4_K_M
+through llama.cpp
+
+Qwen remains responsible for local multimodal intelligence.
+
+Use Qwen for:
+
+- image understanding
+- document understanding
+- semantic visual descriptions
+- ambiguous query interpretation when required
+- final candidate verification where useful
+- sensitive-content classification where useful
+
+Do NOT use Qwen for every trivial query.
+
+==================================================
+24. HYBRID RETRIEVAL
+==================================================
+
+Preserve:
+
+BM25
+SBERT
+CLIP
+Metadata
+Person/Entity index
+OCR
+
+Candidate retrieval should exploit structured filters first.
+
+For example:
+
+Raghul + 9 Dec + image
+
+should not search every file blindly.
+
+Apply:
+
+Person filter
++
+date filter
++
+file type filter
+
+before expensive semantic ranking where possible.
+
+==================================================
+25. QWEN RERANKING
+==================================================
+
+Qwen verification should be optional and candidate-based.
+
+Do not send the complete filesystem to Qwen.
+
+Use it only when:
+
+- visual verification is useful
+- semantic ambiguity exists
+- candidate ranking benefits from multimodal reasoning
+
+==================================================
+26. PRIVACY ENGINE
+==================================================
+
+Create a dedicated Privacy Engine.
+
+Every file must have:
+
+NORMAL
+PROTECTED
+HIDDEN
+
+state.
+
+The user controls which categories are protected.
+
+Categories:
+
+- Personal Information
+- Banking & Finance
+- IDs & Documents
+- Personal Photos
+- Education
+- Work
+- Travel
+- Other
+
+Also allow manual per-file protection/hiding.
+
+==================================================
+27. NORMAL FILE
+==================================================
+
+Normal file:
+
+- appears normally
+- normal preview
+- normal filename
+- no password required
+
+==================================================
+28. PROTECTED FILE
+==================================================
+
+Protected files can still appear in normal search according to settings.
+
+Default:
+
+Documents:
+show protected result, not contents
+
+Images:
+do not show actual preview
+
+Example:
+
+Protected Document
+Protected Image
+
+Opening:
+
+Click Open
+→ password
+→ verify
+→ open
+
+V4 is application-level password protection only.
+
+Do NOT claim that V4 provides encryption.
+
+==================================================
+29. HIDDEN FILE
+==================================================
+
+Hidden files:
+
+- do not appear in normal search
+- do not appear in normal counts
+- do not appear in Persons
+- do not appear in recommendations
+- do not appear in related-file lists
+- do not reveal filenames or thumbnails
+
+Only authenticated private/reveal mode can show them.
+
+==================================================
+30. PRIVACY ACCESS SCOPE
+==================================================
+
+Privacy filtering must happen BEFORE normal result generation.
+
+Normal mode:
+
+ALLOW:
+Normal
+Protected (according to display settings)
+
+EXCLUDE:
+Hidden
+
+Authenticated private mode:
+
+ALLOW:
+Normal
+Protected
+Hidden
+
+This access scope is applied before result counts and normal result presentation.
+
+==================================================
+31. RESULT SANITIZER
+==================================================
+
+After retrieval and ranking, pass results through a Result Sanitizer.
+
+For protected files, hide according to policy:
+
+- filename
+- thumbnail
+- preview
+- OCR snippets
+- sensitive metadata
+- extracted sensitive entities
+- account numbers
+- personal identifiers
+
+Example:
+
+Instead of:
+
+Raghul_HDFC_Account_123456.pdf
+
+return:
+
+Protected Document
+
+when filename hiding is enabled.
+
+==================================================
+32. PRIVACY + PERSONS
+==================================================
+
+Persons must never become a privacy bypass.
+
+If Raghul has:
+
+20 normal photos
+3 protected photos
+1 hidden ID document
+
+the Persons page must respect those states.
+
+Normal:
+visible
+
+Protected:
+locked/sanitized
+
+Hidden:
+not visible
+
+Hidden files must not affect normal visible counts.
+
+==================================================
+33. PRIVACY DETECTION
+==================================================
+
+Use:
+
+OCR
+metadata
+rules/patterns
+local Qwen where useful
+
+to classify potentially sensitive content.
+
+Examples:
+
+Account Number
+IFSC
+Bank Statement
+→ Banking
+
+Aadhaar
+PAN
+Passport
+→ ID
+
+The system may recommend a classification.
+
+The user controls the actual privacy state.
+
+==================================================
+34. PASSWORD
+==================================================
+
+User creates a privacy password.
+
+Never store plaintext.
+
+Use a secure password hashing/KDF mechanism such as Argon2id where practical.
+
+Use password authentication for:
+
+- opening protected files
+- revealing hidden files
+- private search mode
+
+Rate-limit repeated failed attempts.
+
+Never log passwords.
+
+==================================================
+35. PASSWORD RECOVERY
+==================================================
+
+Provide an explicit recovery design.
+
+Prefer a recovery key created during setup.
+
+Do not create a hidden master password.
+
+If the password and recovery method are lost, do not silently bypass protection.
+
+==================================================
+36. PRIVATE SEARCH CODE
+==================================================
+
+A private search code may be implemented as a convenience trigger.
+
+It is NOT authentication.
+
+The password is still required.
+
+Do not make a secret search phrase sufficient to unlock hidden content.
+
+==================================================
+37. PRIVACY SETTINGS
+==================================================
+
+Create:
+
+Privacy Center
+
+Settings should allow:
+
+Category protection ON/OFF
+
+Protected files:
+Show / Hide
+
+Protected filename:
+Show / Hide
+
+Image preview:
+Hide / Blur
+
+Metadata:
+Show limited / Hide
+
+Person/Face Indexing:
+ON / OFF
+
+Multilingual Search:
+ON / OFF
+
+Voice Search:
+ON / OFF
+
+==================================================
+38. FILE INDEXING CATEGORIES
+==================================================
+
+Index semantic metadata such as:
+
+category
+document_type
+persons
+entities
+date
+date_source
+privacy_state
+sensitivity_class
+
+Do not physically move files into category folders.
+
+==================================================
+39. DATABASE DESIGN
+==================================================
+
+Inspect the existing schema before creating new tables.
+
+Possible entities:
+
+Person
+PersonAlias
+FaceEmbedding
+FaceDetection
+PersonFileLink
+Entity
+PrivacyPolicy
+PrivacyState
+TranslationCache
+
+Extend the existing file metadata schema only where necessary.
+
+Do not duplicate existing tables/functions.
+
+Do not destroy the V3 database.
+
+Provide migrations.
+
+==================================================
+40. PERSON DELETION
+==================================================
+
+Deleting a person identity must:
+
+- remove the person profile
+- remove aliases
+- remove stored identity embeddings
+- remove person/file relationships
+
+It must NOT delete the original files unless the user separately chooses to delete those files.
+
+==================================================
+41. FILE CHANGES
+==================================================
+
+Existing filesystem watcher must update:
+
+- search index
+- OCR
+- embeddings
+- person links
+- entity links
+- privacy metadata
+
+when a file is:
+
+- added
+- removed
+- renamed
+- moved
+- replaced
+
+==================================================
+42. DUPLICATES
+==================================================
+
+Use existing duplicate detection/pHash where available.
+
+Do not create repeated person evidence from identical files unnecessarily.
+
+==================================================
+43. VIDEO
+==================================================
+
+For V4, prioritize reliable person recognition in images.
+
+Do not introduce expensive frame-by-frame video face indexing unless the existing architecture supports it efficiently.
+
+Keep the schema extensible for future video support.
+
+==================================================
+44. LOCAL-FIRST
+==================================================
+
+Everything possible remains local:
+
+- indexing
+- OCR
+- face detection
+- face embeddings
+- BM25
+- SBERT
+- CLIP
+- Qwen
+- Persons
+- Entity relationships
+- SQLite/vector storage
+- privacy
+- password verification
+
+Sarvam is used only for:
+
+- multilingual text translation
+- speech processing
+
+Never send files, images, document contents, OCR dumps or face embeddings to Sarvam.
+
+==================================================
+45. OFFLINE FALLBACK
+==================================================
+
+Without internet/Sarvam:
+
+English/local search must continue.
+
+The following must continue:
+
+- local search
+- Persons
+- local AI
+- OCR
+- privacy
+- normal file access
+
+Only multilingual translation and voice-dependent features should fail gracefully.
+
+==================================================
+46. SARVAM API KEY
+==================================================
+
+Use:
+
+SARVAM_API_KEY
+
+through an environment variable.
+
+Never hard-code it.
+
+Never put it in:
+
+- React
+- Electron client
+- source files
+- Git
+- logs
+- public configuration
+
+Use a local .env during development.
+
+Add .env to .gitignore.
+
+Do not ship one shared API key inside the desktop application.
+
+Each developer/user should configure their own key, or a secure backend proxy must be used for production deployment.
+
+==================================================
+47. SARVAM ERROR HANDLING
+==================================================
+
+Handle:
+
+403
+429
+400
+422
+500
+503
+timeouts
+network failure
+
+Do not retry invalid API keys.
+
+Use bounded exponential backoff only for appropriate transient failures such as 429/5xx.
+
+Do not expose API keys in error logs.
+
+==================================================
+48. CPU/GPU FALLBACK
+==================================================
+
+Qwen may use NVIDIA GPU when available.
+
+Face detection/embedding must have CPU support.
+
+The application must not depend on NVIDIA GPU availability for basic functionality.
+
+==================================================
+49. QUERY + PRIVACY EXAMPLES
+==================================================
+
+"Raghul"
+
+→ resolve Raghul person
+→ retrieve relevant files
+
+"show me Raghul's photos"
+
+→ Raghul
+→ image
+
+"show me Raghul's photos from 9 Dec"
+
+→ Raghul
+→ date
+→ image
+
+"show me everything related to Raghul"
+
+→ person entity search
+
+"show me pics from 9 Dec"
+
+→ date
+→ image
+
+"show PDFs about DBMS"
+
+→ semantic text
+→ PDF
+
+Tamil:
+"ராகுலின் புகைப்படங்களைக் காட்டு"
+
+→ Mayura when needed
+→ Query Planner
+→ Raghul + image
+
+Romanized:
+"Raghul oda photos"
+
+→ test direct Mayura handling
+→ Query Planner
+→ Raghul + image
+
+Voice:
+"Show me Raghul's photos from December 9"
+
+→ Saaras
+→ Query Planner
+→ Raghul + date + image
+
+Protected search:
+
+"show my bank statements"
+
+→ retrieve visible protected results
+→ sanitize
+→ password required to open
+
+Hidden:
+
+normal search
+→ hidden file absent
+
+private reveal
+→ password
+→ hidden files become visible
+
+==================================================
+50. SEARCH FLOW
+==================================================
+
+The final search flow MUST be:
+
+USER
+ ↓
+Input Router
+ ↓
+ ┌──────────────────────┐
+ │ Text                 │
+ │ Voice                │
+ └──────────────────────┘
+
+TEXT:
+ ↓
+local English/simple detection
+ ↓
+if multilingual/code-mixed:
+Mayura
+ ↓
+Query Planner
+
+VOICE:
+ ↓
+Saaras v4
+ ↓
+English query
+ ↓
+Query Planner
+
+QUERY PLANNER
+ ↓
+Person / Entity / Date / Type / Category / Keywords
+ ↓
+PRIVACY ACCESS SCOPE
+ ↓
+Candidate Retrieval
+ ↓
+Metadata + BM25 + SBERT + CLIP + Entity Search
+ ↓
+Score Fusion
+ ↓
+Optional Local Qwen verification
+ ↓
+Result Sanitizer
+ ↓
+UI
+
+==================================================
+51. INDEXING FLOW
+==================================================
+
+FILES
+ ↓
+Filesystem Watcher
+ ↓
+Hash / change detection
+ ↓
+ ┌──────────────────────┐
+ │ Existing unchanged?  │
+ └──────────┬───────────┘
+            │
+       YES  │  NO
+        ↓   │   ↓
+   Reuse     Reprocess
+              │
+              ↓
+       Metadata + OCR
+              ↓
+       Document/Image analysis
+              ↓
+      Person indexing if enabled
+              ↓
+       Entity extraction
+              ↓
+      Category detection
+              ↓
+      Privacy classification
+              ↓
+ ┌────────────┼──────────────┐
+ ↓            ↓              ↓
+Text Index  Vector Index  Person/Entity Index
+ └────────────┼──────────────┘
+              ↓
+         Persistent Index
+```
+
+==================================================
+52. PRIVACY FLOW
+==================================================
+
+FILE
+ ↓
+Sensitivity classification
+ ↓
+User privacy policy
+ ↓
+NORMAL / PROTECTED / HIDDEN
+
+NORMAL
+→ normal search
+→ normal preview
+→ normal open
+
+PROTECTED
+→ searchable according to policy
+→ sanitized preview/result
+→ password
+→ open
+
+HIDDEN
+→ excluded from normal search
+→ excluded from counts/persons
+→ private authenticated reveal
+→ password
+→ reveal
+
+==================================================
+53. PERSON FLOW
+==================================================
+
+IMAGE
+ ↓
+Face detection
+ ↓
+Face embedding
+ ↓
+Known-person comparison
+ ↓
+ ┌─────────────┬──────────────┬────────────┐
+ ↓             ↓              ↓
+High          Medium         Low
+ ↓             ↓              ↓
+Auto          Possible       Unknown
+Match         Match          Cluster
+ ↓             ↓              ↓
+Person        Review         User names
+Link          Required       if desired
+
+Person entity
+ ↓
+Related photos
+Related documents
+OCR/name links
+aliases
+metadata
+ ↓
+Searchable Person profile
+```
+
+==================================================
+54. TESTING
+==================================================
+
+Test all of the following.
+
+PERSONS:
+- create person
+- multiple reference photos
+- face matching
+- unknown people
+- rename unknown
+- aliases
+- merge
+- split
+- delete
+- multiple people in image
+- high confidence
+- medium confidence
+- low confidence
+- person indexing disabled
+
+SEARCH:
+- person
+- person + date
+- person + type
+- date
+- date range
+- semantic query
+- multilingual text
+- code-mixed text
+- voice
+
+PRIVACY:
+- normal
+- protected
+- hidden
+- wrong password
+- correct password
+- hidden filename
+- hidden preview
+- hidden result exclusion
+- protected result sanitization
+- private reveal
+- hidden count leakage prevention
+- Persons privacy leakage prevention
+
+INDEXING:
+- new file
+- unchanged file
+- changed file
+- renamed file
+- moved file
+- deleted file
+- duplicate file
+
+SARVAM:
+- valid key
+- missing key
+- invalid key
+- 429
+- 500/503
+- timeout
+- offline
+
+==================================================
+55. SECURITY
+==================================================
+
+Never log:
+
+- passwords
+- API keys
+- face embeddings
+- account numbers
+- private IDs
+- protected OCR content
+
+Do not expose sensitive metadata through debugging output.
+
+==================================================
+56. PERFORMANCE
+==================================================
+
+Optimize for:
+
+- metadata prefiltering
+- incremental indexing
+- reuse of embeddings
+- translation cache
+- person index
+- date index
+- bounded Qwen usage
+- no unnecessary Sarvam calls
+
+Do not perform full-dataset Qwen inference for every search.
+
+==================================================
+57. IMPLEMENTATION ORDER
+==================================================
+
+Implement in this order:
+
+1. Inspect and understand V3.
+2. Universal Query Planner.
+3. Date/type/entity parsing.
+4. Persons database and UI.
+5. Local face detection/embedding pipeline.
+6. Person/entity linking.
+7. Sarvam Mayura multilingual search.
+8. Sarvam Saaras voice search.
+9. Privacy Engine.
+10. Password protection.
+11. Protected/Hidden UI states.
+12. Result Sanitizer.
+13. Privacy settings.
+14. Database migrations.
+15. Testing.
+16. Performance optimization.
+17. Documentation.
+
+Do not proceed by blindly rewriting large parts of V3.
+
+Reuse existing abstractions.
+
+==================================================
+58. FINAL ACCEPTANCE CRITERIA
+==================================================
+
+V4 is complete only when:
+
+- V3 functionality still works.
+- Persons exists in the sidebar.
+- Users can create/naming people.
+- Face matching works locally when enabled.
+- Unknown people can be named.
+- Person merge/split works.
+- Person aliases work.
+- Searching a person retrieves relevant files.
+- Person + date + type queries work.
+- Date searches work.
+- Multilingual text search works with minimal Sarvam usage.
+- Voice search works with Saaras.
+- Sarvam failure does not break local search.
+- Privacy categories are customizable.
+- Protected files can appear without exposing sensitive content.
+- Protected files require password to open.
+- Hidden files stay invisible in normal search.
+- Hidden files do not leak through counts, Persons, suggestions or metadata.
+- Passwords are never stored plaintext.
+- API keys are never hard-coded.
+- No files/images/OCR/face embeddings are sent to Sarvam.
+- Incremental indexing works.
+- V3 databases remain compatible through migration.
+- CPU fallback works.
+- Offline/local functionality continues when Sarvam is unavailable.
+- The implementation is tested rather than merely claimed complete.
+
+Before declaring completion, run the relevant tests and report:
+
+- what was implemented
+- what was tested
+- what failed
+- what remains optional
+- any limitations
+
+Do not claim unsupported functionality as complete.
+</USER_REQUEST>
+<ADDITIONAL_METADATA>
+The current local time is: 2026-10-07T21:50:36+05:30.
+</ADDITIONAL_METADATA>

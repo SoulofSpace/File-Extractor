@@ -52,6 +52,8 @@ class ScanWorker(QThread):
         super().__init__(parent)
         self.enable_vlm = enable_vlm
         self._doc_service: Optional[Any] = None
+        self._privacy_engine: Optional[Any] = None
+        self._person_service: Optional[Any] = None
         # Handle flexible argument ordering for backward compatibility:
         # ScanWorker(path, database) OR ScanWorker(database, path/folder_id, ...)
         if isinstance(arg1, Database):
@@ -159,6 +161,128 @@ class ScanWorker(QThread):
                             self._doc_service.process_file(resolved, file_id, sha_hash)
                         except Exception as vlm_err:
                             logger.debug("VLM understanding skipped for %s: %s", resolved.name, vlm_err)
+
+                    # 8. V4 Metadata, Privacy, and Entity/Face Processing
+                    if file_id:
+                        try:
+                            # 8a. Date extraction (EXIF capture date first, then file mtime)
+                            capture_date = None
+                            date_source = "filesystem"
+                            if ext in IMAGE_EXTENSIONS:
+                                try:
+                                    from PIL import Image, ExifTags
+                                    with Image.open(resolved) as img:
+                                        exif = img.getexif()
+                                        if exif:
+                                            for tag_id, val in exif.items():
+                                                tag_name = ExifTags.TAGS.get(tag_id, "")
+                                                if tag_name in ("DateTimeOriginal", "DateTimeDigitized", "DateTime"):
+                                                    raw_dt = str(val).strip()
+                                                    if len(raw_dt) >= 10:
+                                                        parts = raw_dt[:10].replace(":", "-").split("-")
+                                                        if len(parts) == 3 and len(parts[0]) == 4:
+                                                            capture_date = f"{parts[0]}-{parts[1]}-{parts[2]}"
+                                                            date_source = "exif"
+                                                            break
+                                except Exception:
+                                    pass
+
+                            if not capture_date:
+                                import datetime
+                                mtime_dt = datetime.datetime.fromtimestamp(stat.st_mtime)
+                                capture_date = mtime_dt.strftime("%Y-%m-%d")
+                                date_source = "filesystem"
+
+                            # 8b. Category & Document Type Classification & Sensitivity
+                            if self._privacy_engine is None:
+                                from .privacy_engine import PrivacyEngine
+                                self._privacy_engine = PrivacyEngine(self.database)
+
+                            extracted_n = native_text if ext in EXTRACTABLE_EXTENSIONS and 'native_text' in locals() else ""
+                            extracted_o = ocr_text if ext in EXTRACTABLE_EXTENSIONS and 'ocr_text' in locals() else ""
+                            comb_text = f"{resolved.name} {extracted_n or ''} {extracted_o or ''}".lower()
+                            sensitivity_class, suggested_state, _ = self._privacy_engine.scan_sensitivity(
+                                comb_text, filename=resolved.name
+                            )
+
+                            doc_type = None
+                            cat_v4 = None
+                            if sensitivity_class == "ID_DOCUMENT":
+                                cat_v4 = "IDs & Documents"
+                                if "aadhaar" in comb_text or "uidai" in comb_text:
+                                    doc_type = "Aadhaar Card"
+                                elif "pan" in comb_text or "income tax" in comb_text:
+                                    doc_type = "PAN Card"
+                                elif "passport" in comb_text:
+                                    doc_type = "Passport"
+                                elif "voter" in comb_text or "election" in comb_text:
+                                    doc_type = "Voter ID"
+                                elif "driving" in comb_text or "licence" in comb_text or "license" in comb_text:
+                                    doc_type = "Driving License"
+                                else:
+                                    doc_type = "Identity Document"
+                            elif sensitivity_class == "BANKING_FINANCE":
+                                cat_v4 = "Banking & Finance"
+                                if "statement" in comb_text:
+                                    doc_type = "Bank Statement"
+                                elif "salary" in comb_text or "payslip" in comb_text:
+                                    doc_type = "Salary Slip"
+                                elif "tax" in comb_text or "itr" in comb_text:
+                                    doc_type = "Tax Return"
+                                else:
+                                    doc_type = "Financial Record"
+                            elif ext in IMAGE_EXTENSIONS:
+                                cat_v4 = "Personal Photos"
+                                doc_type = "Photo"
+                            elif any(k in comb_text for k in ["assignment", "syllabus", "lecture", "homework", "exam", "question paper", "da", "dsa", "dbms", "os", "cn"]):
+                                cat_v4 = "Education"
+                                doc_type = "Academic Document"
+                            elif any(k in comb_text for k in ["resume", "cv", "project plan", "meeting notes", "contract", "offer letter", "agreement"]):
+                                cat_v4 = "Work"
+                                doc_type = "Work Document"
+                            elif any(k in comb_text for k in ["ticket", "boarding pass", "flight", "hotel", "itinerary", "booking", "visa"]):
+                                cat_v4 = "Travel"
+                                doc_type = "Travel Document"
+                            elif ext in (".pdf", ".docx", ".doc", ".txt", ".md"):
+                                cat_v4 = "IDs & Documents"
+                                doc_type = "Document"
+                            else:
+                                cat_v4 = "Other"
+                                doc_type = ext.replace(".", "").upper()
+
+                            # Update V4 metadata and privacy
+                            current_priv = self.database.get_file_privacy(file_id)
+                            privacy_to_set = current_priv["privacy_state"] if current_priv.get("manual_override") else suggested_state
+
+                            self.database.update_file_v4_metadata(
+                                file_id=file_id,
+                                category_v4=cat_v4,
+                                document_type=doc_type,
+                                capture_date=capture_date,
+                                date_source=date_source,
+                                sensitivity_class=sensitivity_class,
+                                privacy_state=privacy_to_set,
+                            )
+                            if not current_priv.get("manual_override"):
+                                self.database.update_file_privacy(
+                                    file_id=file_id,
+                                    privacy_state=privacy_to_set,
+                                    sensitivity_class=sensitivity_class,
+                                    manual=False,
+                                )
+
+                            # 8c. Person & Face Indexing
+                            if self._person_service is None:
+                                from .person_service import PersonService
+                                self._person_service = PersonService(self.database)
+                            self._person_service.process_file_faces_and_entities(
+                                file_id=file_id,
+                                file_path=resolved,
+                                ocr_text=extracted_o or "",
+                                document_text=extracted_n or "",
+                            )
+                        except Exception as v4_err:
+                            logger.debug("V4 enrichment skipped for %s: %s", resolved.name, v4_err)
 
                     self.database.upsert_index_job(self.folder_id, resolved_str, stage="complete", status="completed")
 

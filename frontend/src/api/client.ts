@@ -7,7 +7,11 @@ import {
   IndexingStatus,
   SearchHistoryItem,
   SavedSearchItem,
-  DocumentUnderstanding
+  DocumentUnderstanding,
+  Person,
+  PersonDetails,
+  PrivacyStatus,
+  PrivacySettings,
 } from './types';
 
 const API_BASE = typeof window !== 'undefined' && window.location?.origin && window.location.origin.startsWith('http')
@@ -130,13 +134,220 @@ export const apiClient = {
     return res.json();
   },
 
-  async openFile(path: string, reveal = false): Promise<{ status: string }> {
+  async openFile(path: string, reveal = false, privacyToken?: string | null, password?: string): Promise<{ status: string }> {
     const res = await fetch(`${API_BASE}/api/open-file`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ path, reveal }),
+      body: JSON.stringify({ path, reveal, privacy_token: privacyToken, password }),
     });
-    if (!res.ok) throw new Error(`Open file failed: ${res.statusText}`);
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Open file failed: ${res.statusText}`);
+    }
     return res.json();
-  }
+  },
+
+  // ── V4 Persons API ─────────────────────────────────────────────────────────
+
+  async listPersons(includeClusters = true, privacyToken?: string | null): Promise<Person[]> {
+    const pToken = privacyToken ? `&privacy_token=${encodeURIComponent(privacyToken)}` : '';
+    const res = await fetch(`${API_BASE}/api/persons?include_clusters=${includeClusters}${pToken}`);
+    if (!res.ok) throw new Error(`List persons failed: ${res.statusText}`);
+    const data = await res.json();
+    return data.persons || [];
+  },
+
+  async createPerson(
+    name: string,
+    aliases?: string[],
+    referenceImagePaths?: string[],
+    notes?: string
+  ): Promise<{ status: string; person: Person }> {
+    const res = await fetch(`${API_BASE}/api/persons`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name,
+        aliases,
+        reference_image_paths: referenceImagePaths,
+        notes,
+      }),
+    });
+    if (!res.ok) throw new Error(`Create person failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async getPersonDetails(personId: number, privacyToken?: string | null): Promise<PersonDetails> {
+    const pToken = privacyToken ? `?privacy_token=${encodeURIComponent(privacyToken)}` : '';
+    const res = await fetch(`${API_BASE}/api/persons/${personId}${pToken}`);
+    if (!res.ok) throw new Error(`Get person failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async updatePerson(
+    personId: number,
+    data: { name?: string; notes?: string; aliases?: string[] }
+  ): Promise<{ status: string; person: Person }> {
+    const res = await fetch(`${API_BASE}/api/persons/${personId}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data),
+    });
+    if (!res.ok) throw new Error(`Update person failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async deletePerson(personId: number): Promise<{ status: string; id: number }> {
+    const res = await fetch(`${API_BASE}/api/persons/${personId}`, {
+      method: 'DELETE',
+    });
+    if (!res.ok) throw new Error(`Delete person failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async mergePersons(sourcePersonId: number, targetPersonId: number): Promise<{ status: string; person: Person }> {
+    const res = await fetch(`${API_BASE}/api/persons/${sourcePersonId}/merge`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ target_person_id: targetPersonId }),
+    });
+    if (!res.ok) throw new Error(`Merge persons failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async splitPerson(
+    personId: number,
+    newPersonName: string,
+    detectionIds?: number[],
+    fileIds?: number[]
+  ): Promise<{ status: string; person: Person }> {
+    const res = await fetch(`${API_BASE}/api/persons/${personId}/split`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        new_person_name: newPersonName,
+        detection_ids: detectionIds,
+        file_ids: fileIds,
+      }),
+    });
+    if (!res.ok) throw new Error(`Split person failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async nameCluster(clusterId: number, name: string): Promise<{ status: string; person: Person }> {
+    const res = await fetch(`${API_BASE}/api/persons/cluster/${clusterId}/name`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) throw new Error(`Name cluster failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  // ── V4 Voice Search API ────────────────────────────────────────────────────
+
+  async voiceSearch(audioBlob: Blob, privacyToken?: string | null): Promise<{ transcript: string; language: string }> {
+    const formData = new FormData();
+    formData.append('file', audioBlob, 'recording.webm');
+    const pToken = privacyToken ? `?privacy_token=${encodeURIComponent(privacyToken)}` : '';
+    const res = await fetch(`${API_BASE}/api/voice-search${pToken}`, {
+      method: 'POST',
+      body: formData,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Voice search failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  // ── V4 Privacy Center API ──────────────────────────────────────────────────
+
+  async getPrivacyStatus(privacyToken?: string | null): Promise<PrivacyStatus> {
+    const pToken = privacyToken ? `?privacy_token=${encodeURIComponent(privacyToken)}` : '';
+    const res = await fetch(`${API_BASE}/api/privacy/status${pToken}`);
+    if (!res.ok) throw new Error(`Privacy status failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async setupPrivacy(password: string): Promise<{ status: string; recovery_key: string; token: string }> {
+    const res = await fetch(`${API_BASE}/api/privacy/setup`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Privacy setup failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async verifyPrivacy(password: string): Promise<{ status: string; token: string; message: string }> {
+    const res = await fetch(`${API_BASE}/api/privacy/verify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ password }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Password verification failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async recoverPrivacy(recoveryKey: string, newPassword: string): Promise<{ status: string; token: string; message: string }> {
+    const res = await fetch(`${API_BASE}/api/privacy/recover`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ recovery_key: recoveryKey, new_password: newPassword }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Recovery failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async lockPrivacy(privacyToken?: string | null): Promise<{ status: string }> {
+    const pToken = privacyToken ? `?privacy_token=${encodeURIComponent(privacyToken)}` : '';
+    const res = await fetch(`${API_BASE}/api/privacy/lock${pToken}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(`Lock failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async getPrivacySettings(): Promise<PrivacySettings> {
+    const res = await fetch(`${API_BASE}/api/privacy/settings`);
+    if (!res.ok) throw new Error(`Get privacy settings failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async updatePrivacySettings(settings: PrivacySettings): Promise<{ status: string; settings: PrivacySettings }> {
+    const res = await fetch(`${API_BASE}/api/privacy/settings`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ settings }),
+    });
+    if (!res.ok) throw new Error(`Update privacy settings failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async updateFilePrivacy(
+    fileId: number,
+    privacyState: string,
+    privacyToken?: string | null
+  ): Promise<{ status: string; file_id: number; privacy_state: string }> {
+    const res = await fetch(`${API_BASE}/api/files/${fileId}/privacy`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ privacy_state: privacyState, privacy_token: privacyToken }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Update file privacy failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
 };

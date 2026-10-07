@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { createPortal } from 'react-dom';
-import { X, ExternalLink, Folder, Copy, Check, FileText, Brain } from 'lucide-react';
+import { X, ExternalLink, Folder, Copy, Check, FileText, Brain, Lock } from 'lucide-react';
 import { SearchResultItem, DocumentUnderstanding } from '../../api/types';
 import { apiClient } from '../../api/client';
 import { MatchEvidenceView } from '../results/MatchEvidenceView';
@@ -9,9 +9,15 @@ interface PreviewDrawerProps {
   file: SearchResultItem | null;
   onClose: () => void;
   onOpenFile: (path: string, reveal?: boolean) => void;
+  onUnlockRequest?: () => void;
 }
 
-export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onOpenFile }) => {
+export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({
+  file,
+  onClose,
+  onOpenFile,
+  onUnlockRequest,
+}) => {
   const [activeTab, setActiveTab] = useState<'overview' | 'text' | 'ai'>('overview');
   const [detailedDocUnd, setDetailedDocUnd] = useState<DocumentUnderstanding | null>(null);
   const [copied, setCopied] = useState(false);
@@ -152,13 +158,32 @@ export const PreviewDrawer: React.FC<PreviewDrawerProps> = ({ file, onClose, onO
       <div className="flex-1 overflow-y-auto p-5 space-y-5 text-xs">
         {activeTab === 'overview' && (
           <>
+            {/* Protected File Banner */}
+            {file.is_locked && (
+              <div className="p-3.5 rounded-xl bg-amber-500/10 border border-amber-500/20 flex items-center justify-between gap-3 text-amber-300">
+                <div className="flex items-center gap-2">
+                  <Lock className="w-4 h-4 shrink-0" />
+                  <span className="text-xs font-medium">Protected by Privacy Policy</span>
+                </div>
+                {onUnlockRequest && (
+                  <button
+                    type="button"
+                    onClick={onUnlockRequest}
+                    className="px-2.5 py-1 bg-amber-500/20 hover:bg-amber-500/30 text-amber-200 text-[11px] font-semibold rounded-lg transition-colors"
+                  >
+                    Unlock
+                  </button>
+                )}
+              </div>
+            )}
+
             {/* Visual Canvas / Thumbnail */}
             <div className="w-full h-52 rounded-2xl overflow-hidden bg-black/40 border border-white/[0.08] flex items-center justify-center relative">
               {isImage ? (
                 <img
                   src={apiClient.getThumbnailUrl(file.file_id, 600)}
                   alt={file.filename}
-                  className="w-full h-full object-contain"
+                  className={`w-full h-full object-contain ${file.blur_preview || file.is_locked ? 'filter blur-md' : ''}`}
                 />
               ) : (
                 <div className="flex flex-col items-center gap-2 p-6 text-center">

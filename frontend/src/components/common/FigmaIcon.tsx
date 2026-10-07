@@ -25,7 +25,12 @@ export type FigmaIconName =
   | 'video'
   | 'music'
   | 'code'
-  | 'archive';
+  | 'archive'
+  | 'person'
+  | 'mic'
+  | 'lock'
+  | 'unlock'
+  | 'shield';
 
 const iconPaths: Record<FigmaIconName, React.ReactNode> = {
   analysis: (
@@ -151,6 +156,33 @@ const iconPaths: Record<FigmaIconName, React.ReactNode> = {
       <rect x="1" y="3" width="22" height="5" />
       <line x1="10" y1="12" x2="14" y2="12" />
     </>
+  ),
+  person: (
+    <>
+      <path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2" />
+      <circle cx="12" cy="7" r="4" />
+    </>
+  ),
+  mic: (
+    <>
+      <path d="M12 2a3 3 0 0 0-3 3v7a3 3 0 0 0 6 0V5a3 3 0 0 0-3-3Z" />
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2M12 19v3M8 22h8" />
+    </>
+  ),
+  lock: (
+    <>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
+    </>
+  ),
+  unlock: (
+    <>
+      <rect x="3" y="11" width="18" height="11" rx="2" />
+      <path d="M7 11V7a5 5 0 0 1 9.9-1" />
+    </>
+  ),
+  shield: (
+    <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
   ),
 };
 

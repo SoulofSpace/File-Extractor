@@ -311,6 +311,24 @@ button[class*="hover:text-zinc-950"]:hover {
 .archive-preview { display: grid; justify-items: center; gap: 6px; color: rgba(255, 255, 255, 0.68); }
 .archive-preview b { padding: 2px 5px; border: 1px solid rgba(255, 255, 255, 0.18); border-radius: 3px; font-size: 7px; letter-spacing: 0.15em; }
 
+/* Lock Badge for Protected Content */
+.lock-badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.25);
+  border: 1px solid rgba(245, 158, 11, 0.4);
+  color: #fbbf24;
+  backdrop-filter: blur(8px);
+  z-index: 2;
+}
+
 /* File Info */
 .file-info { padding: 11px 12px 12px; display: grid; gap: 6px; flex: 1; }
 .file-info > span { display: flex; align-items: center; justify-content: space-between; gap: 8px; }

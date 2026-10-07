@@ -25,6 +25,10 @@ from .compositional_evaluator import CompositionalEvaluator
 from .query_planner import QueryPlan, QueryPlanner, ACRONYM_MAP, ASSIGNMENT_REGEX, COMPOUND_PAIRS, CONVERSATIONAL_FILLERS, decompose_compositional_query
 from .reranker import CandidateReranker
 from .vision_search import search_images_with_clip
+from .universal_query_planner import UniversalQueryPlanner, UniversalSearchPlan
+from .person_service import PersonService
+from .sarvam_service import SarvamService
+from .privacy_engine import PrivacyEngine
 
 CATEGORY_EXTS_MAP = {
     "document": {".pdf", ".docx", ".doc", ".txt", ".md", ".rtf", ".pptx", ".ppt", ".xlsx", ".xls", ".csv", ".tsv", ".odt", ".ods", ".epub"},
@@ -54,6 +58,10 @@ class AIAgent:
         query_planner: Optional[QueryPlanner] = None,
         reranker: Optional[CandidateReranker] = None,
         compositional_evaluator: Optional[CompositionalEvaluator] = None,
+        universal_query_planner: Optional[UniversalQueryPlanner] = None,
+        person_service: Optional[PersonService] = None,
+        sarvam_service: Optional[SarvamService] = None,
+        privacy_engine: Optional[PrivacyEngine] = None,
     ):
         self.database = database
         self.embedding_provider = embedding_provider
@@ -61,6 +69,10 @@ class AIAgent:
         self.query_planner = query_planner or QueryPlanner()
         self.reranker = reranker or CandidateReranker()
         self.compositional_evaluator = compositional_evaluator or CompositionalEvaluator()
+        self.universal_query_planner = universal_query_planner
+        self.person_service = person_service
+        self.sarvam_service = sarvam_service
+        self.privacy_engine = privacy_engine or (PrivacyEngine(database) if database else None)
 
     def parse_query(self, query: str) -> QueryPlan:
         """Parse raw query into structured QueryPlan using QueryPlanner."""
@@ -74,11 +86,37 @@ class AIAgent:
         limit: int = 45,
         debug: bool = False,
         rerank: bool = False,
+        privacy_scope: str = "NORMAL",
+        is_authenticated: bool = False,
+        privacy_token: Optional[str] = None,
     ) -> list[dict]:
 
-        plan = self.parse_query(query)
+        # Validate privacy token if provided
+        if privacy_token and self.privacy_engine:
+            if self.privacy_engine.validate_session(privacy_token):
+                is_authenticated = True
+                privacy_scope = "PRIVATE"
 
-        # Candidate registry: path -> {record, scores: {bm25, sem, clip, file, ocr, metadata}, reasons, snippet}
+        # ── V4 Input Processing: Multilingual / Code-mixed translation ────────
+        working_query = query
+        if self.sarvam_service and getattr(self, "database", None):
+            is_multi = self.database.get_privacy_setting("multilingual_search_enabled", "true") == "true"
+            if is_multi and self.sarvam_service.is_configured:
+                translated = self.sarvam_service.translate_to_english(query)
+                if translated and translated.strip():
+                    working_query = translated.strip()
+
+        # ── V4 Universal Query Planning ───────────────────────────────────────
+        if self.universal_query_planner is None and self.database:
+            self.universal_query_planner = UniversalQueryPlanner(self.database)
+
+        v4_plan = self.universal_query_planner.plan_query(working_query) if self.universal_query_planner else None
+
+        # V3 Query plan for legacy scoring compatibility
+        v3_q = (v4_plan.cleaned_query if v4_plan and v4_plan.cleaned_query else working_query)
+        plan = self.parse_query(v3_q)
+
+        # Candidate registry: path -> {record, scores: {bm25, sem, clip, file, ocr, metadata, person, date, category}, reasons, snippet}
         candidates: Dict[str, Dict[str, Any]] = {}
 
         def get_or_create(path_str: str, file_dict: dict) -> Dict[str, Any]:
@@ -92,6 +130,9 @@ class AIAgent:
                     "clip_score": 0.0,
                     "vlm_score": 0.0,
                     "metadata_score": 0.0,
+                    "person_score": 0.0,
+                    "date_score": 0.0,
+                    "category_score": 0.0,
                     "subject_match": 0.0,
                     "attribute_match": 0.0,
                     "clothing_match": 0.0,
@@ -106,17 +147,40 @@ class AIAgent:
                 }
             return candidates[path_str]
 
+        # ── Branch 0: V4 Person/Entity Retrieval (Requirement 13) ────────────
+        if v4_plan and v4_plan.is_person_search and v4_plan.person_name:
+            target_p = self.database.find_person_by_name_or_alias(v4_plan.person_name)
+            if not target_p:
+                for kp in self.database.list_persons(include_clusters=False, privacy_scope=privacy_scope):
+                    if v4_plan.person_name.lower() in kp["name"].lower():
+                        target_p = kp
+                        break
+            if target_p:
+                p_files = self.database.get_person_files(target_p["id"], privacy_scope=privacy_scope)
+                for pf in p_files:
+                    p_str = str(pf.get("path", ""))
+                    if not p_str:
+                        continue
+                    entry = get_or_create(p_str, pf)
+                    conf = float(pf.get("confidence") or 0.95)
+                    entry["person_score"] = max(entry["person_score"], conf)
+                    link_tp = pf.get("link_type", "face")
+                    entry["reasons"].append(f"Person match: {target_p['name']} ({link_tp})")
+
         # ── Branch 1a: Deep Multimodal CLIP Vision Search ─────────────
         if user_category:
             should_clip = (user_category.strip().upper() == "IMAGE")
+        elif v4_plan and v4_plan.file_type:
+            should_clip = (v4_plan.file_type == "image")
         else:
             # Enable visual search if query is visual or general (not strictly academic notes/assignments)
-            should_clip = plan.is_visual or not plan.is_academic
+            should_clip = plan.is_visual or (v4_plan and bool(v4_plan.visual_concepts)) or not plan.is_academic
         if should_clip:
             all_images = self.database.get_recent_files(category="Image", limit=150)
             if all_images:
+                clip_q = v4_plan.visual_concepts if (v4_plan and v4_plan.visual_concepts) else plan.cleaned_query
                 clip_hits = search_images_with_clip(
-                    plan.cleaned_query,
+                    clip_q,
                     all_images,
                     threshold=0.19,
                     limit=25,
@@ -283,6 +347,49 @@ class AIAgent:
             if c_score.vlm_score > 0.15:
                 entry["reasons"].append(f"Visual understanding ({c_score.vlm_score:.2f})")
 
+        # ── V4 Date Evaluation (Requirement 16) ──────────────────────
+        if v4_plan and (v4_plan.date_start or v4_plan.date_end):
+            for p_str, entry in candidates.items():
+                rec = entry["record"]
+                f_date = rec.get("capture_date")
+                if not f_date and rec.get("modified_at"):
+                    import datetime
+                    try:
+                        f_date = datetime.datetime.fromtimestamp(rec["modified_at"]).strftime("%Y-%m-%d")
+                    except Exception:
+                        pass
+
+                if f_date:
+                    in_range = True
+                    if v4_plan.date_start and f_date < v4_plan.date_start:
+                        in_range = False
+                    if v4_plan.date_end and f_date > v4_plan.date_end:
+                        in_range = False
+                    if in_range:
+                        entry["date_score"] = 1.0
+                        entry["metadata_score"] = max(entry["metadata_score"], 0.9)
+                        entry["reasons"].append(f"Date match ({f_date})")
+                    else:
+                        entry["date_score"] = -1.0
+
+        # ── V4 Document Type & Category Evaluation (Requirement 17) ──
+        if v4_plan and (v4_plan.category or v4_plan.document_type):
+            target_cat = (v4_plan.category or "").lower()
+            target_dt = (v4_plan.document_type or "").lower()
+            for p_str, entry in candidates.items():
+                rec = entry["record"]
+                r_cat = str(rec.get("category_v4") or rec.get("category") or "").lower()
+                r_dt = str(rec.get("document_type") or "").lower()
+                r_name = str(rec.get("filename") or Path(p_str).name).lower()
+                if target_dt and (target_dt in r_dt or target_dt in r_name):
+                    entry["category_score"] = max(entry.get("category_score", 0.0), 1.0)
+                    entry["metadata_score"] = max(entry["metadata_score"], 0.95)
+                    entry["reasons"].append(f"Doc type: {rec.get('document_type') or target_dt.title()}")
+                elif target_cat and (target_cat in r_cat or target_cat in r_name):
+                    entry["category_score"] = max(entry.get("category_score", 0.0), 0.8)
+                    entry["metadata_score"] = max(entry["metadata_score"], 0.85)
+                    entry["reasons"].append(f"Category: {rec.get('category_v4') or target_cat.title()}")
+
         # ── Linear Score Fusion & Structured Match Evidence ───────────
         # Determine weights based on query intent
         if plan.is_academic:
@@ -348,6 +455,28 @@ class AIAgent:
             # Contradiction suppression: if candidate contradicts query requirements
             if contra > 0.0:
                 score = score * max(0.15, (1.0 - 0.60 * contra))
+
+            # V4 Person Match Fusion (Requirement 13)
+            person_s = entry.get("person_score", 0.0)
+            if v4_plan and v4_plan.is_person_search:
+                if person_s > 0.0:
+                    score = 0.55 * person_s + 0.45 * score
+                else:
+                    score = score * 0.40
+
+            # V4 Date Match bonus / penalty
+            date_s = entry.get("date_score", 0.0)
+            if v4_plan and (v4_plan.date_start or v4_plan.date_end):
+                if date_s > 0.0:
+                    score = min(1.0, score * 1.35)
+                elif date_s < 0.0:
+                    score = score * 0.40
+
+            # V4 Category / Doc Type bonus
+            cat_s = entry.get("category_score", 0.0)
+            if cat_s > 0.0:
+                score = min(1.0, score * 1.25)
+
             score = max(0.0, min(1.0, score))
 
             # Deduplicate reasons
@@ -396,6 +525,7 @@ class AIAgent:
             rec["match_evidence"]["semantic"] = entry["sem_score"]
             rec["match_evidence"]["visual"] = entry["clip_score"]
             rec["match_evidence"]["vlm"] = vlm_s
+            rec["match_evidence"]["person"] = person_s
 
             if not rec.get("extension") and p_str:
                 rec["extension"] = Path(p_str).suffix
@@ -411,9 +541,22 @@ class AIAgent:
         if rerank and self.reranker is not None:
             final_results = self.reranker.rerank(query, final_results, top_k=min(5, len(final_results)))
 
+        # ── V4 Privacy Access Scope & Result Sanitization (Requirements 30 & 31) ──
+        scoped_results = []
+        for r in final_results:
+            p_state = (r.get("privacy_state") or "NORMAL").upper()
+            if p_state == "HIDDEN" and not is_authenticated:
+                continue
+            scoped_results.append(r)
+
+        if self.privacy_engine is not None:
+            sanitized_results = self.privacy_engine.sanitize_results(scoped_results, is_authenticated=is_authenticated)
+        else:
+            sanitized_results = scoped_results
+
         if debug:
             print(f"\nQUERY:\n\"{query}\"")
-            for r in final_results[:10]:
+            for r in sanitized_results[:10]:
                 fn = r.get("filename", Path(r.get("path", "")).name)
                 me = r.get("match_evidence", {})
                 print(f"\nRESULT: {fn}\n")
@@ -434,5 +577,5 @@ class AIAgent:
                 print(f"  contradiction      = {me.get('contradiction', 0.0):.2f}")
                 print(f"  final_score        = {r.get('relevance_score', 0.0):.2f}")
 
-        return final_results[:limit]
+        return sanitized_results[:limit]
 

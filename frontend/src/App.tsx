@@ -9,16 +9,19 @@ import {
   SearchHistoryItem,
   SavedSearchItem,
   IndexingStatus,
+  PrivacyStatus,
 } from './api/types';
 import { PreviewDrawer } from './components/preview/PreviewDrawer';
 import { FolderManager } from './components/indexing/FolderManager';
 import { SearchHistoryView } from './components/history/SearchHistoryView';
 import { SavedSearchesView } from './components/history/SavedSearchesView';
 import { SettingsDialog } from './components/settings/SettingsDialog';
+import { PersonsView } from './components/persons/PersonsView';
+import { PasswordModal } from './components/common/PasswordModal';
 import { CursorTrailOverlay } from './components/common/CursorTrailOverlay';
 import { ErrorBoundary } from './components/common/ErrorBoundary';
 
-type ViewMode = 'files' | 'gallery' | 'analysis' | 'folders' | 'history';
+type ViewMode = 'files' | 'gallery' | 'analysis' | 'folders' | 'history' | 'persons';
 
 export const App: React.FC = () => {
   // DOM & Animation Refs
@@ -36,6 +39,24 @@ export const App: React.FC = () => {
   const [showSettingsModal, setShowSettingsModal] = useState(false);
   const [showAddFolderModal, setShowAddFolderModal] = useState(false);
   const [historyTab, setHistoryTab] = useState<'history' | 'saved'>('history');
+
+  // V4 Persons & Privacy State
+  const [personsCount, setPersonsCount] = useState(0);
+  const [privacyToken, setPrivacyToken] = useState<string | null>(() =>
+    sessionStorage.getItem('file_xtractor_privacy_token')
+  );
+  const [privacyStatus, setPrivacyStatus] = useState<PrivacyStatus>({
+    is_configured: false,
+    is_unlocked: false,
+  });
+  const [showPasswordModal, setShowPasswordModal] = useState(false);
+  const [passwordModalMode, setPasswordModalMode] = useState<'verify' | 'setup' | 'recover'>('verify');
+  const [pendingProtectedAction, setPendingProtectedAction] = useState<(() => void) | null>(null);
+
+  // Voice Search Recording State
+  const [isRecording, setIsRecording] = useState(false);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const audioChunksRef = useRef<Blob[]>([]);
 
   // Search & Filter State
   const [searchQuery, setSearchQuery] = useState('');
@@ -112,6 +133,8 @@ export const App: React.FC = () => {
     apiClient.getFolders().then((f) => setFolders(f || [])).catch(() => {});
     apiClient.getSearchHistory(40).then((h) => setHistory(h || [])).catch(() => {});
     apiClient.getSavedSearches().then((s) => setSavedSearches(s || [])).catch(() => {});
+    apiClient.listPersons(true, privacyToken).then((p) => setPersonsCount(p.length)).catch(() => {});
+    apiClient.getPrivacyStatus(privacyToken).then(setPrivacyStatus).catch(() => {});
 
     // Fetch heavier AI neural engine status concurrently
     apiClient.getStatus().then((st) => {
@@ -120,7 +143,7 @@ export const App: React.FC = () => {
     }).catch((err) => {
       console.warn('Backend status warning:', err);
     });
-  }, []);
+  }, [privacyToken]);
 
   useEffect(() => {
     refreshSystemData();
@@ -134,6 +157,38 @@ export const App: React.FC = () => {
     return () => clearInterval(interval);
   }, [refreshSystemData]);
 
+  // Privacy lock and unlock handlers
+  const handleLockPrivacy = async () => {
+    try {
+      await apiClient.lockPrivacy();
+    } catch {}
+    setPrivacyToken(null);
+    sessionStorage.removeItem('file_xtractor_privacy_token');
+    setNotice('Privacy locked');
+    apiClient.getPrivacyStatus(null).then(setPrivacyStatus).catch(() => {});
+    apiClient.getRecentFiles(40).then((r) => setRecentFiles(r || [])).catch(() => {});
+    if (hasSearched && searchQuery.trim()) {
+      executeSearch(searchQuery, activeCategory, selectedFormats, null);
+    }
+  };
+
+  const handlePrivacyUnlocked = (token: string) => {
+    setPrivacyToken(token);
+    sessionStorage.setItem('file_xtractor_privacy_token', token);
+    setShowPasswordModal(false);
+    setNotice('Protected files unlocked');
+    apiClient.getPrivacyStatus(token).then(setPrivacyStatus).catch(() => {});
+    apiClient.getRecentFiles(40).then((r) => setRecentFiles(r || [])).catch(() => {});
+    apiClient.listPersons(true, token).then((p) => setPersonsCount(p.length)).catch(() => {});
+    if (hasSearched && searchQuery.trim()) {
+      executeSearch(searchQuery, activeCategory, selectedFormats, token);
+    }
+    if (pendingProtectedAction) {
+      pendingProtectedAction();
+      setPendingProtectedAction(null);
+    }
+  };
+
   // 4. Keyboard Shortcuts (⌘ N / Ctrl+N for new extraction)
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -145,15 +200,21 @@ export const App: React.FC = () => {
         if (selectedFile) setSelectedFile(null);
         if (showSettingsModal) setShowSettingsModal(false);
         if (showAddFolderModal) setShowAddFolderModal(false);
+        if (showPasswordModal) setShowPasswordModal(false);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [selectedFile, showSettingsModal, showAddFolderModal]);
+  }, [selectedFile, showSettingsModal, showAddFolderModal, showPasswordModal]);
 
   // 5. Execute Backend Search
   const executeSearch = useCallback(
-    async (queryText: string, category = activeCategory, formats = selectedFormats) => {
+    async (
+      queryText: string,
+      category = activeCategory,
+      formats = selectedFormats,
+      token = privacyToken
+    ) => {
       const trimmed = queryText.trim();
       if (!trimmed) {
         setHasSearched(false);
@@ -170,6 +231,7 @@ export const App: React.FC = () => {
           formats: formats.length > 0 ? formats : undefined,
           limit: 60,
           save_history: true,
+          privacy_token: token || undefined,
         });
 
         setSearchResults(resp.results || []);
@@ -185,8 +247,77 @@ export const App: React.FC = () => {
         setIsSearching(false);
       }
     },
-    [activeCategory, selectedFormats]
+    [activeCategory, selectedFormats, privacyToken]
   );
+
+  // Voice Search Handler via Sarvam Saaras
+  const handleToggleVoiceSearch = async () => {
+    if (isRecording) {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+        mediaRecorderRef.current.stop();
+      }
+      setIsRecording(false);
+    } else {
+      try {
+        if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+          setNotice('Microphone not supported on this device');
+          return;
+        }
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        audioChunksRef.current = [];
+        const mimeType = MediaRecorder.isTypeSupported('audio/webm')
+          ? 'audio/webm'
+          : MediaRecorder.isTypeSupported('audio/ogg')
+          ? 'audio/ogg'
+          : '';
+        const recorder = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
+        mediaRecorderRef.current = recorder;
+
+        recorder.ondataavailable = (e) => {
+          if (e.data && e.data.size > 0) {
+            audioChunksRef.current.push(e.data);
+          }
+        };
+
+        recorder.onstop = async () => {
+          stream.getTracks().forEach((track) => track.stop());
+          const audioBlob = new Blob(audioChunksRef.current, { type: recorder.mimeType || 'audio/webm' });
+          if (audioBlob.size < 100) {
+            setNotice('Audio recording too short');
+            return;
+          }
+          setNotice('Transcribing speech with Sarvam Saaras...');
+          setIsSearching(true);
+          try {
+            const result = await apiClient.voiceSearch(audioBlob, privacyToken);
+            if (result.transcript && result.transcript.trim()) {
+              const query = result.transcript.trim();
+              setSearchQuery(query);
+              setNotice(`Recognized: "${query}" (${result.language || 'auto'})`);
+              if (view !== 'files' && view !== 'gallery') {
+                setView('files');
+              }
+              executeSearch(query);
+            } else {
+              setNotice('No speech recognized in audio');
+            }
+          } catch (err: any) {
+            console.error('Voice search failed:', err);
+            setNotice(err.message || 'Voice search failed');
+          } finally {
+            setIsSearching(false);
+          }
+        };
+
+        recorder.start();
+        setIsRecording(true);
+        setNotice('Listening... Click mic again to finish');
+      } catch (err) {
+        console.error('Microphone access error:', err);
+        setNotice('Microphone access denied or unavailable');
+      }
+    }
+  };
 
   const handleSearchSubmit = (e?: React.FormEvent) => {
     if (e) e.preventDefault();
@@ -327,11 +458,36 @@ export const App: React.FC = () => {
     return 'file';
   };
 
-  const handleOpenFile = (path: string, reveal = false) => {
+  const handleOpenFile = (path: string, reveal = false, fileObj?: SearchResultItem) => {
+    if (fileObj?.is_locked && !privacyToken) {
+      setPendingProtectedAction(() => () => {
+        apiClient
+          .openFile(path, reveal, sessionStorage.getItem('file_xtractor_privacy_token'))
+          .then(() => setNotice(reveal ? 'Revealed in file manager' : 'Opened file'))
+          .catch((err: any) => setNotice(err.message || 'Could not open file'));
+      });
+      setPasswordModalMode(privacyStatus.is_configured ? 'verify' : 'setup');
+      setShowPasswordModal(true);
+      return;
+    }
+
     apiClient
-      .openFile(path, reveal)
+      .openFile(path, reveal, privacyToken)
       .then(() => setNotice(reveal ? 'Revealed in file manager' : 'Opened file'))
-      .catch(() => setNotice('Could not open file directly'));
+      .catch((err: any) => {
+        if (err.message && (err.message.includes('password') || err.message.includes('Protected'))) {
+          setPendingProtectedAction(() => () => {
+            apiClient
+              .openFile(path, reveal, sessionStorage.getItem('file_xtractor_privacy_token'))
+              .then(() => setNotice(reveal ? 'Revealed in file manager' : 'Opened file'))
+              .catch(() => setNotice('Could not open file'));
+          });
+          setPasswordModalMode(privacyStatus.is_configured ? 'verify' : 'setup');
+          setShowPasswordModal(true);
+        } else {
+          setNotice('Could not open file directly');
+        }
+      });
   };
 
   // Add folder handler
@@ -415,6 +571,16 @@ export const App: React.FC = () => {
             </button>
 
             <button
+              className={view === 'persons' ? 'active' : ''}
+              type="button"
+              onClick={() => setView('persons')}
+            >
+              <FigmaIcon name="person" size={17} />
+              <span>Persons</span>
+              <small>{personsCount}</small>
+            </button>
+
+            <button
               className={view === 'analysis' ? 'active' : ''}
               type="button"
               onClick={() => setView('analysis')}
@@ -475,8 +641,36 @@ export const App: React.FC = () => {
             ))}
           </div>
 
-          {/* Sidebar Footer: Settings & Indexing Bar */}
+          {/* Sidebar Footer: Privacy Status, Settings & Indexing Bar */}
           <div className="sidebar-footer">
+            {privacyStatus.is_configured && (
+              <button
+                type="button"
+                onClick={() => {
+                  if (privacyToken) {
+                    handleLockPrivacy();
+                  } else {
+                    setPasswordModalMode('verify');
+                    setShowPasswordModal(true);
+                  }
+                }}
+                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl mb-1 text-xs transition-colors ${
+                  privacyToken
+                    ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20'
+                    : 'bg-white/[0.04] text-zinc-400 border border-white/[0.08] hover:text-white'
+                }`}
+                title={privacyToken ? 'Click to lock privacy mode' : 'Click to unlock protected files'}
+              >
+                <span className="flex items-center gap-2">
+                  <FigmaIcon name={privacyToken ? 'unlock' : 'lock'} size={15} />
+                  <span>{privacyToken ? 'Privacy Unlocked' : 'Privacy Locked'}</span>
+                </span>
+                <span className="text-[10px] uppercase font-mono px-1.5 py-0.5 rounded bg-black/30">
+                  {privacyToken ? 'Lock' : 'Unlock'}
+                </span>
+              </button>
+            )}
+
             <button type="button" onClick={() => setShowSettingsModal(true)}>
               <FigmaIcon name="settings" size={17} />
               <span>Settings</span>
@@ -528,7 +722,7 @@ export const App: React.FC = () => {
                     onKeyDown={(e) => {
                       if (e.key === 'Enter') handleSearchSubmit();
                     }}
-                    placeholder="Search files, text, or metadata..."
+                    placeholder="Search files, text, people, dates, or metadata..."
                     autoFocus
                   />
                   {searchQuery && (
@@ -541,6 +735,18 @@ export const App: React.FC = () => {
                       ✕
                     </button>
                   )}
+                  <button
+                    type="button"
+                    onClick={handleToggleVoiceSearch}
+                    className={`p-1.5 rounded-lg transition-all ${
+                      isRecording
+                        ? 'bg-rose-500 text-white animate-pulse'
+                        : 'text-zinc-400 hover:text-white hover:bg-white/10'
+                    }`}
+                    title={isRecording ? 'Listening... click to finish' : 'Voice Search (Sarvam Saaras)'}
+                  >
+                    <FigmaIcon name="mic" size={17} />
+                  </button>
                 </form>
 
                 <div className="search-controls">
@@ -768,6 +974,21 @@ export const App: React.FC = () => {
             </section>
           )}
 
+          {/* Persons Management View */}
+          {view === 'persons' && (
+            <section className="library-panel">
+              <PersonsView
+                privacyToken={privacyToken}
+                onSearchPerson={(personName) => {
+                  setSearchQuery(personName);
+                  setView('files');
+                  executeSearch(personName);
+                }}
+                onOpenFile={(p) => handleOpenFile(p, false)}
+              />
+            </section>
+          )}
+
           {/* History & Saved Searches View */}
           {view === 'history' && (
             <section className="library-panel">
@@ -947,11 +1168,17 @@ export const App: React.FC = () => {
                       >
                         {/* Preview Section */}
                         <span className={`file-preview art-${artIndex}`}>
+                          {file.is_locked && (
+                            <span className="lock-badge" title="Protected file">
+                              <FigmaIcon name="lock" size={12} />
+                            </span>
+                          )}
                           {kind === 'image' ? (
                             <img
                               src={apiClient.getThumbnailUrl(file.file_id, 320)}
                               alt={file.filename}
                               loading="lazy"
+                              style={file.blur_preview || file.is_locked ? { filter: 'blur(16px)' } : undefined}
                               onError={(e) => {
                                 // Graceful fallback to Figma geometric mountain line-art
                                 (e.currentTarget as HTMLElement).style.display = 'none';
@@ -988,7 +1215,7 @@ export const App: React.FC = () => {
                             title="Actions"
                             onClick={(e) => {
                               e.stopPropagation();
-                              handleOpenFile(file.path, false);
+                              handleOpenFile(file.path, false, file);
                             }}
                           >
                             <FigmaIcon name="external" size={14} />
@@ -1059,7 +1286,11 @@ export const App: React.FC = () => {
           <PreviewDrawer
             file={selectedFile}
             onClose={() => setSelectedFile(null)}
-            onOpenFile={handleOpenFile}
+            onOpenFile={(path, reveal) => handleOpenFile(path, reveal, selectedFile)}
+            onUnlockRequest={() => {
+              setPasswordModalMode(privacyStatus.is_configured ? 'verify' : 'setup');
+              setShowPasswordModal(true);
+            }}
           />
         )}
 
@@ -1086,10 +1317,23 @@ export const App: React.FC = () => {
                 onToggleCursorTrail={() => setCursorTrailEnabled((v) => !v)}
                 defaultViewMode={compact ? 'list' : 'grid'}
                 onChangeDefaultView={(m) => setCompact(m === 'list')}
+                privacyToken={privacyToken}
+                onPrivacyUnlocked={handlePrivacyUnlocked}
               />
             </div>
           </div>
         )}
+
+        {/* 5.5. Password / Privacy Modal */}
+        <PasswordModal
+          isOpen={showPasswordModal}
+          mode={passwordModalMode}
+          onClose={() => {
+            setShowPasswordModal(false);
+            setPendingProtectedAction(null);
+          }}
+          onSuccess={handlePrivacyUnlocked}
+        />
 
         {/* 6. Add Folder Modal Dialog */}
         {showAddFolderModal && (

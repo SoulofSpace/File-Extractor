@@ -54,6 +54,15 @@ export interface SearchResultItem {
   snippet?: string;
   extracted_text?: string;
   ocr_text?: string;
+  privacy_state?: 'NORMAL' | 'PROTECTED' | 'HIDDEN';
+  is_locked?: boolean;
+  is_protected?: boolean;
+  is_hidden?: boolean;
+  blur_preview?: boolean;
+  category_v4?: string;
+  document_type?: string;
+  capture_date?: string;
+  date_source?: string;
 }
 
 export interface QueryPlanInfo {
@@ -89,6 +98,8 @@ export interface SearchRequest {
   sort_by?: 'relevance' | 'date_desc' | 'date_asc' | 'size_desc' | 'size_asc' | 'name';
   limit?: number;
   save_history?: boolean;
+  privacy_token?: string | null;
+  privacy_scope?: 'NORMAL' | 'PRIVATE';
 }
 
 export interface FolderItem {
@@ -138,3 +149,60 @@ export interface SavedSearchItem {
   name: string;
   created_at: string;
 }
+
+export interface Person {
+  id: number;
+  name: string;
+  is_cluster: boolean;
+  cluster_label?: string;
+  notes?: string;
+  avatar_file_id?: number;
+  aliases?: string[];
+  file_count?: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface PersonFileLink {
+  id: number;
+  file_id: number;
+  person_id: number;
+  link_type: 'face' | 'ocr' | 'filename' | 'entity';
+  confidence: number;
+  is_confirmed: boolean;
+  notes?: string;
+  path: string;
+  filename: string;
+  extension: string;
+  size_bytes: number;
+  privacy_state?: string;
+  capture_date?: string;
+  created_at: string;
+}
+
+export interface PersonDetails extends Person {
+  files: PersonFileLink[];
+  photo_count: number;
+  doc_count: number;
+}
+
+export interface PrivacyStatus {
+  is_configured: boolean;
+  is_unlocked: boolean;
+}
+
+export interface PrivacySettings {
+  protect_banking?: string;
+  protect_ids?: string;
+  protect_personal_info?: string;
+  protect_confidential?: string;
+  protected_files_visibility?: 'show' | 'hide';
+  hide_protected_filename?: 'true' | 'false';
+  protected_image_preview?: 'blur' | 'hide';
+  protected_metadata_mode?: 'limited' | 'hide';
+  face_indexing_enabled?: 'true' | 'false';
+  multilingual_search_enabled?: 'true' | 'false';
+  voice_search_enabled?: 'true' | 'false';
+  [key: string]: string | undefined;
+}
+
