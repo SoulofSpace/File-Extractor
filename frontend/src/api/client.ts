@@ -12,6 +12,9 @@ import {
   PersonDetails,
   PrivacyStatus,
   PrivacySettings,
+  StorageAnalytics,
+  FaceReviewItem,
+  FileFaceDetection,
 } from './types';
 
 const API_BASE = typeof window !== 'undefined' && window.location?.origin && window.location.origin.startsWith('http')
@@ -350,4 +353,155 @@ export const apiClient = {
     }
     return res.json();
   },
+
+  async getStorageAnalytics(privacyToken?: string | null): Promise<StorageAnalytics> {
+    const pToken = privacyToken ? `?privacy_token=${encodeURIComponent(privacyToken)}` : '';
+    const res = await fetch(`${API_BASE}/api/storage-analytics${pToken}`);
+    if (!res.ok) throw new Error(`Get storage analytics failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async scanLibraryFaces(force = false): Promise<{
+    status: string;
+    images_scanned: number;
+    faces_detected: number;
+    new_clusters_created: number;
+    total_persons: number;
+    message?: string;
+  }> {
+    const res = await fetch(`${API_BASE}/api/persons/scan-faces?force=${force}`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(`Scan faces failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async applyPrivacyPolicies(): Promise<{ status: string; classified_counts: Record<string, number> }> {
+    const res = await fetch(`${API_BASE}/api/privacy/apply-policies`, {
+      method: 'POST',
+    });
+    if (!res.ok) throw new Error(`Apply privacy policies failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  getFaceCropUrl(detectionId: number): string {
+    return `${API_BASE}/api/face-detections/${detectionId}/crop`;
+  },
+
+  getFileThumbnailUrl(fileId: number, size = 1400): string {
+    return `${API_BASE}/api/thumbnail/${fileId}?size=${size}`;
+  },
+
+  async getFaceReviewQueue(limit = 150): Promise<{ review_queue: FaceReviewItem[] }> {
+    const res = await fetch(`${API_BASE}/api/face-detections/review?limit=${limit}`);
+    if (!res.ok) throw new Error(`Get face review queue failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async getFileFaces(fileId: number): Promise<{ file_id: number; image_width: number; image_height: number; path?: string; faces: FileFaceDetection[] }> {
+    const res = await fetch(`${API_BASE}/api/files/${fileId}/faces`);
+    if (!res.ok) throw new Error(`Get file faces failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async confirmAllFaceDetections(personId?: number): Promise<{ status: string; confirmed_count: number }> {
+    const url = personId != null
+      ? `${API_BASE}/api/face-detections/confirm-all?person_id=${personId}`
+      : `${API_BASE}/api/face-detections/confirm-all`;
+    const res = await fetch(url, { method: 'POST' });
+    if (!res.ok) throw new Error(`Confirm all failed: ${res.statusText}`);
+    return res.json();
+  },
+
+  async createPersonFromDetection(
+    detectionId: number,
+    name: string,
+    aliases?: string[],
+    notes?: string
+  ): Promise<{ status: string; person_id: number; name: string; detection_id: number }> {
+    const res = await fetch(`${API_BASE}/api/face-detections/${detectionId}/create-person`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, aliases, notes }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Create person from detection failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async assignFaceDetection(
+    detectionId: number,
+    personId: number
+  ): Promise<{ status: string; detection_id: number; person_id: number }> {
+    const res = await fetch(`${API_BASE}/api/face-detections/${detectionId}/assign?person_id=${personId}`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Assign face failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async confirmFaceDetection(
+    detectionId: number,
+    personId?: number
+  ): Promise<{ status: string; detection_id: number; person_id: number; person_name?: string }> {
+    const url = personId != null
+      ? `${API_BASE}/api/face-detections/${detectionId}/confirm?person_id=${personId}`
+      : `${API_BASE}/api/face-detections/${detectionId}/confirm`;
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: personId != null ? JSON.stringify({ person_id: personId }) : undefined,
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Confirm face failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async rejectFaceDetection(detectionId: number): Promise<{ status: string; detection_id: number }> {
+    const res = await fetch(`${API_BASE}/api/face-detections/${detectionId}/reject`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Reject face failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async keepUnknownFaceDetection(detectionId: number): Promise<{ status: string; detection_id: number }> {
+    const res = await fetch(`${API_BASE}/api/face-detections/${detectionId}/keep-unknown`, {
+      method: 'POST',
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Keep unknown failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
+
+  async addReferencePhoto(
+    personId: number,
+    photoPath?: string,
+    detectionId?: number
+  ): Promise<{ status: string; person_id: number; embedding_id?: number; file_id?: number; face_quality?: number }> {
+    const res = await fetch(`${API_BASE}/api/persons/${personId}/reference-photos`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ photo_path: photoPath, detection_id: detectionId }),
+    });
+    if (!res.ok) {
+      const err = await res.json().catch(() => ({}));
+      throw new Error(err.detail || `Add reference photo failed: ${res.statusText}`);
+    }
+    return res.json();
+  },
 };
+
+

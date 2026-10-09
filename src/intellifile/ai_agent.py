@@ -99,18 +99,40 @@ class AIAgent:
 
         # ── V4 Input Processing: Multilingual / Code-mixed translation ────────
         working_query = query
-        if self.sarvam_service and getattr(self, "database", None):
-            is_multi = self.database.get_privacy_setting("multilingual_search_enabled", "true") == "true"
-            if is_multi and self.sarvam_service.is_configured:
-                translated = self.sarvam_service.translate_to_english(query)
-                if translated and translated.strip():
-                    working_query = translated.strip()
+        original_query = query
+        was_translated = False
+        detected_lang = None
+
+        if self.sarvam_service and self.sarvam_service.is_configured and self.sarvam_service.is_multilingual_enabled:
+            try:
+                res = self.sarvam_service.translate_query_details(query)
+                if res.was_translated and res.translated_text and res.translated_text.strip():
+                    working_query = res.translated_text.strip()
+                    was_translated = True
+                    detected_lang = res.source_language
+            except Exception as e:
+                logger.warning("Sarvam translation error: %s. Using original query.", e)
+                working_query = query
+
+        self.last_original_query = original_query
+        self.last_translated_query = working_query
+        self.last_was_translated = was_translated
+        self.last_detected_language = detected_lang
 
         # ── V4 Universal Query Planning ───────────────────────────────────────
         if self.universal_query_planner is None and self.database:
             self.universal_query_planner = UniversalQueryPlanner(self.database)
 
-        v4_plan = self.universal_query_planner.plan_query(working_query) if self.universal_query_planner else None
+        v4_plan = (
+            self.universal_query_planner.plan_query(
+                working_query,
+                original_query=original_query,
+                was_translated=was_translated,
+                source_language=detected_lang,
+            )
+            if self.universal_query_planner
+            else None
+        )
 
         # V3 Query plan for legacy scoring compatibility
         v3_q = (v4_plan.cleaned_query if v4_plan and v4_plan.cleaned_query else working_query)
@@ -176,13 +198,13 @@ class AIAgent:
             # Enable visual search if query is visual or general (not strictly academic notes/assignments)
             should_clip = plan.is_visual or (v4_plan and bool(v4_plan.visual_concepts)) or not plan.is_academic
         if should_clip:
-            all_images = self.database.get_recent_files(category="Image", limit=150)
+            all_images = [img for img in self.database.get_recent_files(category="Image", limit=150) if Path(img.get("path", "")).exists()]
             if all_images:
-                clip_q = v4_plan.visual_concepts if (v4_plan and v4_plan.visual_concepts) else plan.cleaned_query
+                clip_q = plan.cleaned_query or (v4_plan.cleaned_query if v4_plan else "")
                 clip_hits = search_images_with_clip(
                     clip_q,
                     all_images,
-                    threshold=0.19,
+                    threshold=0.18,
                     limit=25,
                 )
                 for hit in clip_hits:
@@ -401,6 +423,8 @@ class AIAgent:
 
         final_results: list[dict] = []
         for p_str, entry in candidates.items():
+            if not Path(p_str).exists():
+                continue
             rec = entry["record"]
 
             # Filter by category if explicitly requested by user
@@ -531,6 +555,9 @@ class AIAgent:
                 rec["extension"] = Path(p_str).suffix
             if not rec.get("filename") and p_str:
                 rec["filename"] = Path(p_str).name
+
+            if query != "*" and score <= 0.05:
+                continue
 
             final_results.append(rec)
 

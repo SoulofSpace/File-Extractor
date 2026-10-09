@@ -152,6 +152,10 @@ class UniversalSearchPlan:
     is_visual_search: bool = False
     is_privacy_sensitive: bool = False
     explanation: str = ""
+    original_query: Optional[str] = None
+    translated_query: Optional[str] = None
+    was_translated: bool = False
+    source_language: Optional[str] = None
 
     @property
     def person_name(self) -> Optional[str]:
@@ -186,6 +190,10 @@ class UniversalSearchPlan:
             "intent": self.intent,
             "raw_query": self.raw_query,
             "cleaned_query": self.cleaned_query,
+            "original_query": self.original_query,
+            "translated_query": self.translated_query,
+            "was_translated": self.was_translated,
+            "source_language": self.source_language,
             "persons": self.persons,
             "person_ids": self.person_ids,
             "entities": self.entities,
@@ -216,8 +224,20 @@ class UniversalQueryPlanner:
     def __init__(self, database: Optional[Any] = None) -> None:
         self.database = database
 
-    def plan_query(self, raw_query: str, current_year: int = 2026) -> UniversalSearchPlan:
-        return self.parse(raw_query, current_year)
+    def plan_query(
+        self,
+        raw_query: str,
+        current_year: int = 2026,
+        original_query: Optional[str] = None,
+        was_translated: bool = False,
+        source_language: Optional[str] = None,
+    ) -> UniversalSearchPlan:
+        plan = self.parse(raw_query, current_year)
+        plan.original_query = original_query or raw_query
+        plan.translated_query = raw_query if was_translated else None
+        plan.was_translated = was_translated
+        plan.source_language = source_language
+        return plan
 
     def parse(self, raw_query: str, current_year: int = 2026) -> UniversalSearchPlan:
         query = (raw_query or "").strip()
@@ -230,14 +250,20 @@ class UniversalQueryPlanner:
         # 2. Extract Date / Date Range
         date_constraint, cleaned_no_date = self._extract_date(cleaned, current_year)
 
-        # 3. Extract Document Types and Categories
-        doc_types, categories, cleaned_no_doc = self._extract_doc_types_and_categories(cleaned_no_date)
+        # 3. Extract File Types (image, pdf, etc.)
+        file_types, cleaned_no_types = self._extract_file_types(cleaned_no_date)
 
-        # 4. Extract File Types (image, pdf, etc.)
-        file_types, cleaned_no_types = self._extract_file_types(cleaned_no_doc)
+        # 4. Extract Document Types and Categories
+        doc_types, categories, cleaned_no_doc = self._extract_doc_types_and_categories(cleaned_no_types)
+
+        # Ensure bidirectional mapping between image file type and Personal Photos category
+        if "Personal Photos" in categories and "image" not in file_types:
+            file_types.append("image")
+        elif "image" in file_types and "Personal Photos" not in categories:
+            categories.append("Personal Photos")
 
         # 5. Extract Persons and Aliases
-        persons, person_ids, cleaned_no_persons = self._extract_persons(cleaned_no_types)
+        persons, person_ids, cleaned_no_persons = self._extract_persons(cleaned_no_doc)
 
         # 6. Extract Keywords, Visual concepts, and Acronyms
         keywords, visual_concepts, semantic_concepts = self._extract_concepts(cleaned_no_persons)

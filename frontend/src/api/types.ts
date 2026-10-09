@@ -157,6 +157,7 @@ export interface Person {
   cluster_label?: string;
   notes?: string;
   avatar_file_id?: number;
+  primary_face_detection_id?: number | null;
   aliases?: string[];
   file_count?: number;
   created_at: string;
@@ -204,5 +205,85 @@ export interface PrivacySettings {
   multilingual_search_enabled?: 'true' | 'false';
   voice_search_enabled?: 'true' | 'false';
   [key: string]: string | undefined;
+}
+
+export interface StorageCategoryItem {
+  name: string;
+  count: number;
+  bytes: number;
+  color: string;
+}
+
+export interface StorageFolderItem {
+  path: string;
+  name: string;
+  count: number;
+  bytes: number;
+}
+
+export interface LargestFileItem {
+  id: number;
+  filename: string;
+  path: string;
+  size_bytes: number;
+  extension: string;
+  file_type?: string;
+  is_protected?: boolean;
+}
+
+export interface StorageAnalytics {
+  total_files: number;
+  total_bytes: number;
+  protected_files: number;
+  protected_bytes: number;
+  duplicate_files: number;
+  duplicate_bytes: number;
+  categories: StorageCategoryItem[];
+  folders: StorageFolderItem[];
+  largest_files: LargestFileItem[];
+}
+
+export interface FaceReviewItem {
+  id: number;
+  file_id: number;
+  filename: string;
+  path: string;
+  box: [number, number, number, number];
+  confidence: number | null;
+  face_quality: number | null;
+  person_id: number | null;
+  person_name: string | null;
+  is_cluster: boolean;
+  match_confidence: number | null;
+  is_confirmed: boolean;
+  created_at: string;
+  suggested_person_id?: number | null;
+  suggested_person_name?: string | null;
+  suggested_similarity?: number | null;
+}
+
+export interface FileFaceDetection {
+  id: number;
+  file_id: number;
+  box_x: number;
+  box_y: number;
+  box_w: number;
+  box_h: number;
+  confidence: number;
+  match_confidence: number | null;
+  face_quality: number | null;
+  landmarks_json?: string | null;
+  person_id: number | null;
+  person_name?: string | null;
+  norm_x?: number | null;
+  norm_y?: number | null;
+  norm_w?: number | null;
+  norm_h?: number | null;
+  is_cluster?: boolean;
+  link_confirmed?: boolean;
+  created_at?: string;
+  suggested_person_id?: number | null;
+  suggested_person_name?: string | null;
+  suggested_similarity?: number | null;
 }
 

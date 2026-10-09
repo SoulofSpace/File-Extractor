@@ -10,6 +10,7 @@ import {
   SavedSearchItem,
   IndexingStatus,
   PrivacyStatus,
+  StorageAnalytics,
 } from './api/types';
 import { PreviewDrawer } from './components/preview/PreviewDrawer';
 import { FolderManager } from './components/indexing/FolderManager';
@@ -88,6 +89,22 @@ export const App: React.FC = () => {
   const [animationEnabled, setAnimationEnabled] = useState(true);
   const [cursorTrailEnabled, setCursorTrailEnabled] = useState(true);
 
+  // Storage Analytics State
+  const [storageAnalytics, setStorageAnalytics] = useState<StorageAnalytics | null>(null);
+  const [loadingStorage, setLoadingStorage] = useState(false);
+
+  // Recently Opened Files State
+  const [recentlyOpened, setRecentlyOpened] = useState<SearchResultItem[]>(() => {
+    try {
+      const raw = localStorage.getItem('file_xtractor_recently_opened');
+      return raw ? JSON.parse(raw) : [];
+    } catch {
+      return [];
+    }
+  });
+  const [recentFilterMode, setRecentFilterMode] = useState<'opened' | 'indexed'>('opened');
+  const [showSearchDropdown, setShowSearchDropdown] = useState(false);
+
   // 1. Mouse physics loop for interactive gradient background
   useEffect(() => {
     if (!animationEnabled) return;
@@ -156,6 +173,25 @@ export const App: React.FC = () => {
     }, 3000);
     return () => clearInterval(interval);
   }, [refreshSystemData]);
+
+  // Load storage analytics when in analysis view
+  const loadStorageAnalytics = useCallback(async () => {
+    setLoadingStorage(true);
+    try {
+      const data = await apiClient.getStorageAnalytics(privacyToken);
+      setStorageAnalytics(data);
+    } catch (err) {
+      console.error('Failed to load storage analytics:', err);
+    } finally {
+      setLoadingStorage(false);
+    }
+  }, [privacyToken]);
+
+  useEffect(() => {
+    if (view === 'analysis') {
+      loadStorageAnalytics();
+    }
+  }, [view, loadStorageAnalytics]);
 
   // Privacy lock and unlock handlers
   const handleLockPrivacy = async () => {
@@ -354,7 +390,14 @@ export const App: React.FC = () => {
 
   // 7. Determine active file list based on view & search
   const visibleFiles = useMemo(() => {
-    let list = hasSearched ? [...searchResults] : [...recentFiles];
+    let list: SearchResultItem[];
+    if (hasSearched) {
+      list = [...searchResults];
+    } else if (recentFilterMode === 'opened' && recentlyOpened.length > 0) {
+      list = [...recentlyOpened];
+    } else {
+      list = [...recentFiles];
+    }
 
     // Filter by Gallery view (images only)
     if (view === 'gallery') {
@@ -396,7 +439,7 @@ export const App: React.FC = () => {
     });
 
     return list;
-  }, [hasSearched, searchResults, recentFiles, view, activeCategory, selectedFormats, sortOption]);
+  }, [hasSearched, searchResults, recentFiles, recentlyOpened, recentFilterMode, view, activeCategory, selectedFormats, sortOption]);
 
   // Helpers
   const formatBytes = (bytes?: number) => {
@@ -459,6 +502,18 @@ export const App: React.FC = () => {
   };
 
   const handleOpenFile = (path: string, reveal = false, fileObj?: SearchResultItem) => {
+    const targetFile = fileObj || visibleFiles.find((f) => f.path === path) || recentFiles.find((f) => f.path === path);
+    if (targetFile) {
+      setRecentlyOpened((prev) => {
+        const filtered = prev.filter((f) => f.path !== targetFile.path && f.file_id !== targetFile.file_id);
+        const updated = [targetFile, ...filtered].slice(0, 30);
+        try {
+          localStorage.setItem('file_xtractor_recently_opened', JSON.stringify(updated));
+        } catch {}
+        return updated;
+      });
+    }
+
     if (fileObj?.is_locked && !privacyToken) {
       setPendingProtectedAction(() => () => {
         apiClient
@@ -654,7 +709,7 @@ export const App: React.FC = () => {
                     setShowPasswordModal(true);
                   }
                 }}
-                className={`w-full flex items-center justify-between px-3 py-2 rounded-xl mb-1 text-xs transition-colors ${
+                className={`sidebar-privacy-btn w-full flex items-center justify-between px-3 py-2 rounded-xl mb-1 text-xs transition-colors ${
                   privacyToken
                     ? 'bg-amber-500/10 text-amber-300 border border-amber-500/20 hover:bg-amber-500/20'
                     : 'bg-white/[0.04] text-zinc-400 border border-white/[0.08] hover:text-white'
@@ -671,7 +726,7 @@ export const App: React.FC = () => {
               </button>
             )}
 
-            <button type="button" onClick={() => setShowSettingsModal(true)}>
+            <button type="button" className="sidebar-settings-btn" onClick={() => setShowSettingsModal(true)}>
               <FigmaIcon name="settings" size={17} />
               <span>Settings</span>
               <FigmaIcon name="chevron" size={13} />
@@ -710,7 +765,7 @@ export const App: React.FC = () => {
               </div>
 
               {/* Centered Hero Search Bar */}
-              <div className="hero-search" role="search">
+              <div className="hero-search relative" role="search">
                 <form onSubmit={handleSearchSubmit} className="search-field">
                   <FigmaIcon name="search" size={20} />
                   <input
@@ -719,8 +774,16 @@ export const App: React.FC = () => {
                       setSearchQuery(e.target.value);
                       if (!e.target.value) handleClearSearch();
                     }}
+                    onFocus={() => setShowSearchDropdown(true)}
+                    onBlur={() => setTimeout(() => setShowSearchDropdown(false), 250)}
                     onKeyDown={(e) => {
-                      if (e.key === 'Enter') handleSearchSubmit();
+                      if (e.key === 'Enter') {
+                        setShowSearchDropdown(false);
+                        handleSearchSubmit();
+                      }
+                      if (e.key === 'Escape') {
+                        setShowSearchDropdown(false);
+                      }
                     }}
                     placeholder="Search files, text, people, dates, or metadata..."
                     autoFocus
@@ -748,6 +811,71 @@ export const App: React.FC = () => {
                     <FigmaIcon name="mic" size={17} />
                   </button>
                 </form>
+
+                {/* Floating Recent Searches Dropdown */}
+                {showSearchDropdown && history.filter((h) => (h.query || (h as any).query_text)?.trim()).length > 0 && !searchQuery && (
+                  <div className="absolute top-[52px] left-0 right-0 p-2 bg-zinc-900/95 border border-white/10 rounded-2xl shadow-2xl backdrop-blur-2xl z-50 animate-fadeIn">
+                    <div className="flex items-center justify-between px-3 py-1.5 text-[10px] text-zinc-400 font-semibold uppercase tracking-wider border-b border-white/[0.06] mb-1">
+                      <span className="flex items-center gap-1.5">
+                        <FigmaIcon name="clock" size={12} />
+                        <span>Recent Searches</span>
+                      </span>
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onMouseDown={async (e) => {
+                            e.preventDefault();
+                            await apiClient.clearSearchHistory();
+                            setHistory([]);
+                            setShowSearchDropdown(false);
+                          }}
+                          className="text-[10px] text-zinc-500 hover:text-rose-400 font-normal transition-colors"
+                        >
+                          Clear
+                        </button>
+                        <button
+                          type="button"
+                          onMouseDown={(e) => {
+                            e.preventDefault();
+                            setShowSearchDropdown(false);
+                          }}
+                          className="text-zinc-500 hover:text-white"
+                        >
+                          ✕
+                        </button>
+                      </div>
+                    </div>
+                    <div className="space-y-0.5 max-h-52 overflow-y-auto">
+                      {history
+                        .filter((item) => (item.query || (item as any).query_text)?.trim())
+                        .slice(0, 6)
+                        .map((item, idx) => {
+                          const qText = (item.query || (item as any).query_text || '').trim();
+                          return (
+                            <div
+                              key={idx}
+                              onMouseDown={(e) => {
+                                e.preventDefault();
+                                if (!qText) return;
+                                setSearchQuery(qText);
+                                setShowSearchDropdown(false);
+                                executeSearch(qText);
+                              }}
+                              className="flex items-center justify-between px-3 py-2 rounded-xl text-xs text-zinc-300 hover:text-white hover:bg-white/[0.08] cursor-pointer transition-colors"
+                            >
+                              <div className="flex items-center gap-2 truncate">
+                                <FigmaIcon name="search" size={13} />
+                                <span className="truncate">{qText}</span>
+                              </div>
+                              <span className="text-[10px] text-zinc-500 font-mono">
+                                {item.result_count ?? 0} results
+                              </span>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </div>
+                )}
 
                 <div className="search-controls">
                   <div>
@@ -863,94 +991,239 @@ export const App: React.FC = () => {
 
           {/* 3. Panel Views */}
           {/* Analysis View */}
+          {/* Analysis View -> Storage Analytics Dashboard */}
           {view === 'analysis' && (
-            <section className="analytics-panel">
+            <section className="analytics-panel space-y-6">
               <div className="analytics-head">
                 <div>
-                  <span className="eyebrow">Local Neural Engine</span>
-                  <h2>Workspace activity & AI health</h2>
+                  <span className="eyebrow">Capacity & Storage Intelligence</span>
+                  <h2>Storage Analytics & Library Capacity</h2>
                 </div>
-                <strong>Operational</strong>
-              </div>
-
-              {/* Animated Activity Chart */}
-              <div className="chart">
-                {[34, 51, 42, 68, 58, 81, 72, 93, 79, 100, 91, 116].map((height, index) => (
-                  <i key={index} style={{ height }} title={`Metric: ${height}`} />
-                ))}
-              </div>
-
-              {/* Core System Metrics */}
-              <div className="metrics">
-                <div>
-                  <span>Files indexed</span>
-                  <strong>{totalFilesCount.toLocaleString()}</strong>
-                  <small>Across {folders.length} libraries</small>
-                </div>
-                <div>
-                  <span>Database health</span>
-                  <strong>SQLite + FTS5</strong>
-                  <small>BM25 lexical ranking active</small>
-                </div>
-                <div>
-                  <span>Offline AI pipeline</span>
-                  <strong>100% Local</strong>
-                  <small>Zero data leaves your PC</small>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    onClick={loadStorageAnalytics}
+                    className="px-3 py-1.5 rounded-xl bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 text-xs font-medium border border-white/[0.08] transition-colors"
+                  >
+                    Refresh
+                  </button>
+                  <strong className="text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-3 py-1 rounded-xl text-xs">
+                    {storageAnalytics ? formatBytes(storageAnalytics.total_bytes) : 'Calculating...'}
+                  </strong>
                 </div>
               </div>
 
-              {/* AI Pipeline Details */}
-              <div className="mt-6 pt-6 border-t border-white/[0.07] grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
-                    Dense Semantic Model
-                  </span>
-                  <div className="text-sm font-semibold text-white mt-1">all-MiniLM-L6-v2</div>
-                  <small className="text-[10px] text-emerald-400">PyTorch CPU / GPU Active</small>
+              {loadingStorage && !storageAnalytics ? (
+                <div className="py-20 text-center text-zinc-500 text-sm">
+                  Calculating disk and storage metrics across indexed libraries...
                 </div>
+              ) : storageAnalytics ? (
+                <div className="space-y-6">
+                  {/* Top 4 Metrics Cards */}
+                  <div className="metrics">
+                    <div>
+                      <span>Total space used</span>
+                      <strong>{formatBytes(storageAnalytics.total_bytes)}</strong>
+                      <small>{storageAnalytics.total_files.toLocaleString()} files indexed</small>
+                    </div>
+                    <div>
+                      <span>Protected files</span>
+                      <strong className="text-amber-400">{storageAnalytics.protected_files} Files</strong>
+                      <small>{formatBytes(storageAnalytics.protected_bytes)} privacy locked</small>
+                    </div>
+                    <div>
+                      <span>Monitored libraries</span>
+                      <strong>{storageAnalytics.folders.length} Folders</strong>
+                      <small>Background watcher active</small>
+                    </div>
+                    <div>
+                      <span>Duplicate waste</span>
+                      <strong className="text-emerald-400">{formatBytes(storageAnalytics.duplicate_bytes)}</strong>
+                      <small>{storageAnalytics.duplicate_files} duplicate files</small>
+                    </div>
+                  </div>
 
-                <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
-                    Vision Embedding Model
-                  </span>
-                  <div className="text-sm font-semibold text-white mt-1">clip-ViT-B-32</div>
-                  <small className="text-[10px] text-emerald-400">Visual Zero-shot Active</small>
+                  {/* Storage by Category Multi-Segment Progress Bar */}
+                  <div className="p-5 rounded-2xl bg-zinc-900/60 border border-white/[0.08] space-y-4">
+                    <div className="flex items-center justify-between text-xs">
+                      <span className="font-semibold text-white uppercase tracking-wider text-[11px]">
+                        Storage by Category Breakdown
+                      </span>
+                      <span className="text-zinc-400">
+                        {storageAnalytics.categories.length} active categories
+                      </span>
+                    </div>
+
+                    {/* Proportional Segment Bar */}
+                    <div className="h-3 w-full rounded-full bg-white/[0.05] overflow-hidden flex">
+                      {storageAnalytics.categories.map((cat) => {
+                        const pct = storageAnalytics.total_bytes > 0
+                          ? (cat.bytes / storageAnalytics.total_bytes) * 100
+                          : 0;
+                        if (pct < 0.2) return null;
+                        return (
+                          <div
+                            key={cat.name}
+                            style={{ width: `${pct}%`, backgroundColor: cat.color }}
+                            className="h-full transition-all duration-300"
+                            title={`${cat.name}: ${formatBytes(cat.bytes)} (${pct.toFixed(1)}%)`}
+                          />
+                        );
+                      })}
+                    </div>
+
+                    {/* Category Cards Grid */}
+                    <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-7 gap-2.5 pt-2">
+                      {storageAnalytics.categories.map((cat) => {
+                        const pct = storageAnalytics.total_bytes > 0
+                          ? ((cat.bytes / storageAnalytics.total_bytes) * 100).toFixed(1)
+                          : '0';
+                        return (
+                          <div
+                            key={cat.name}
+                            className="p-3 rounded-xl bg-white/[0.02] border border-white/[0.05] space-y-1 hover:bg-white/[0.05] transition-colors"
+                          >
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="w-2.5 h-2.5 rounded-full shrink-0"
+                                style={{ backgroundColor: cat.color }}
+                              />
+                              <span className="text-xs font-semibold text-zinc-200 truncate">{cat.name}</span>
+                            </div>
+                            <div className="text-sm font-bold text-white">{formatBytes(cat.bytes)}</div>
+                            <div className="text-[10px] text-zinc-500">
+                              {cat.count} files · {pct}%
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Monitored Folders Capacity Breakdown */}
+                  <div className="p-5 rounded-2xl bg-zinc-900/60 border border-white/[0.08] space-y-3">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-semibold text-white uppercase tracking-wider text-[11px]">
+                        Indexed Library Distribution
+                      </span>
+                      <button
+                        type="button"
+                        onClick={() => setView('folders')}
+                        className="text-xs text-sky-400 hover:underline"
+                      >
+                        Manage Folders →
+                      </button>
+                    </div>
+
+                    <div className="divide-y divide-white/[0.04]">
+                      {storageAnalytics.folders.map((fo) => {
+                        const pct = storageAnalytics.total_bytes > 0
+                          ? ((fo.bytes / storageAnalytics.total_bytes) * 100).toFixed(1)
+                          : '0';
+                        return (
+                          <div key={fo.path} className="py-2.5 flex items-center justify-between gap-3 text-xs">
+                            <div className="min-w-0 flex-1">
+                              <div className="font-medium text-white truncate">{fo.name}</div>
+                              <div className="text-[10px] text-zinc-500 truncate font-mono">{fo.path}</div>
+                            </div>
+                            <div className="text-right shrink-0">
+                              <div className="font-bold text-white">{formatBytes(fo.bytes)}</div>
+                              <div className="text-[10px] text-zinc-400">
+                                {fo.count} files · {pct}% of storage
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+
+                  {/* Top 15 Largest Files on Disk */}
+                  <div className="p-5 rounded-2xl bg-zinc-900/60 border border-white/[0.08] space-y-3">
+                    <div className="flex items-center justify-between text-xs mb-1">
+                      <span className="font-semibold text-white uppercase tracking-wider text-[11px]">
+                        Top Largest Files on Disk
+                      </span>
+                      <span className="text-[10px] text-zinc-500">Fast space optimization</span>
+                    </div>
+
+                    <div className="divide-y divide-white/[0.04]">
+                      {storageAnalytics.largest_files.map((file, idx) => (
+                        <div
+                          key={file.id}
+                          className="py-2.5 flex items-center justify-between gap-3 text-xs hover:bg-white/[0.02] px-2 rounded-lg transition-colors"
+                        >
+                          <div className="flex items-center gap-3 min-w-0 flex-1">
+                            <span className="text-[11px] font-mono text-zinc-600 w-5 text-right">{idx + 1}</span>
+                            <FigmaIcon name="file" size={16} />
+                            <div className="min-w-0 flex-1 truncate">
+                              <div className="font-medium text-white truncate flex items-center gap-2">
+                                <span className="truncate">{file.filename}</span>
+                                {file.is_protected && (
+                                  <span className="text-[9px] uppercase px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-300 border border-amber-500/20">
+                                    Protected
+                                  </span>
+                                )}
+                              </div>
+                              <div className="text-[10px] text-zinc-500 truncate font-mono">{file.path}</div>
+                            </div>
+                          </div>
+
+                          <div className="flex items-center gap-3 shrink-0">
+                            <span className="font-bold font-mono text-white text-xs">
+                              {formatBytes(file.size_bytes)}
+                            </span>
+                            <div className="flex items-center gap-1">
+                              <button
+                                type="button"
+                                onClick={() => handleOpenFile(file.path, false)}
+                                className="px-2.5 py-1 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-zinc-300 hover:text-white text-[11px] font-medium transition-colors"
+                                title="Open file"
+                              >
+                                Open
+                              </button>
+                              <button
+                                type="button"
+                                onClick={() => handleOpenFile(file.path, true)}
+                                className="px-2.5 py-1 rounded-lg bg-white/[0.04] hover:bg-white/[0.08] text-zinc-400 hover:text-white text-[11px] transition-colors"
+                                title="Reveal in File Explorer"
+                              >
+                                Reveal
+                              </button>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Quick Indexing Actions */}
+                  <div className="mt-6 flex items-center gap-3">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        if (folders[0]) {
+                          apiClient.triggerRescan(folders[0].path);
+                          setNotice('Rescanning index...');
+                        } else {
+                          setShowAddFolderModal(true);
+                        }
+                      }}
+                      className="btn-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-colors shadow-sm"
+                      style={{ backgroundColor: '#ffffff', color: '#09090b' }}
+                    >
+                      Scan Library Now
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setView('folders')}
+                      className="px-4 py-2 rounded-xl bg-white/[0.06] text-white font-medium text-xs hover:bg-white/[0.1] border border-white/[0.08] transition-colors"
+                    >
+                      Manage Folders
+                    </button>
+                  </div>
                 </div>
-
-                <div className="p-3.5 rounded-xl bg-white/[0.03] border border-white/[0.06]">
-                  <span className="text-[10px] text-zinc-500 uppercase tracking-wider block">
-                    Visual Language Understanding
-                  </span>
-                  <div className="text-sm font-semibold text-white mt-1">Qwen3.5-4B VLM</div>
-                  <small className="text-[10px] text-sky-400">Local llama.cpp Bridge</small>
-                </div>
-              </div>
-
-              {/* Quick Indexing Actions */}
-              <div className="mt-6 flex items-center gap-3">
-                <button
-                  type="button"
-                  onClick={() => {
-                    if (folders[0]) {
-                      apiClient.triggerRescan(folders[0].path);
-                      setNotice('Rescanning index...');
-                    } else {
-                      setShowAddFolderModal(true);
-                    }
-                  }}
-                  className="btn-white px-4 py-2 rounded-xl font-bold text-xs hover:bg-zinc-200 transition-colors shadow-sm"
-                  style={{ backgroundColor: '#ffffff', color: '#09090b' }}
-                >
-                  Scan Library Now
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setView('folders')}
-                  className="px-4 py-2 rounded-xl bg-white/[0.06] text-white font-medium text-xs hover:bg-white/[0.1] border border-white/[0.08] transition-colors"
-                >
-                  Manage Folders
-                </button>
-              </div>
+              ) : null}
             </section>
           )}
 
@@ -1072,20 +1345,24 @@ export const App: React.FC = () => {
 
                 <div className="filter-pills">
                   <button
-                    className={!hasSearched ? 'active' : ''}
+                    className={recentFilterMode === 'opened' && !hasSearched ? 'active' : ''}
                     type="button"
                     onClick={() => {
-                      handleClearSearch();
-                      setActiveCategory('ALL');
+                      setRecentFilterMode('opened');
+                      if (hasSearched) handleClearSearch();
+                      setNotice(recentlyOpened.length > 0 ? `Showing ${recentlyOpened.length} recently opened files` : 'No opened files yet in session. Open any file to add it here.');
                     }}
                   >
-                    Recently opened
+                    Recently opened {recentlyOpened.length > 0 ? `(${recentlyOpened.length})` : ''}
                   </button>
                   <button
+                    className={recentFilterMode === 'indexed' && !hasSearched ? 'active' : ''}
                     type="button"
                     onClick={() => {
-                      setNotice('Files sorted by latest indexed');
+                      setRecentFilterMode('indexed');
                       setSortOption('date');
+                      if (hasSearched) handleClearSearch();
+                      setNotice('Files sorted by latest indexed date');
                     }}
                   >
                     Recently indexed

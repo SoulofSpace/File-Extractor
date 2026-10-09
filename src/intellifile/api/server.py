@@ -20,7 +20,7 @@ import threading
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from fastapi import FastAPI, HTTPException, Query, BackgroundTasks, Response
+from fastapi import FastAPI, HTTPException, Query, Body, BackgroundTasks, Response
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, Response
 from pydantic import BaseModel, Field
@@ -179,6 +179,17 @@ class UpdateFilePrivacyRequest(BaseModel):
     privacy_token: Optional[str] = None
 
 
+class CreatePersonFromDetectionRequest(BaseModel):
+    name: str
+    aliases: Optional[List[str]] = None
+    notes: Optional[str] = ""
+
+
+class AddReferencePhotoRequest(BaseModel):
+    photo_path: Optional[str] = None
+    detection_id: Optional[int] = None
+
+
 # ── Health & System Status Endpoints ──────────────────────────────────────────
 
 @app.get("/api/status")
@@ -328,6 +339,10 @@ def search_files(req: SearchRequest):
             "actions": cq.actions if cq else [],
             "scene": cq.scene if cq else [],
             "relationships": cq.relationships if cq else [],
+            "original_query": getattr(agent, "last_original_query", query_text),
+            "translated_query": getattr(agent, "last_translated_query", query_text),
+            "was_translated": getattr(agent, "last_was_translated", False),
+            "detected_language": getattr(agent, "last_detected_language", None),
         }
     except Exception:
         pass
@@ -367,6 +382,10 @@ def search_files(req: SearchRequest):
 
     return {
         "query": query_text,
+        "original_query": getattr(agent, "last_original_query", query_text),
+        "translated_query": getattr(agent, "last_translated_query", query_text),
+        "was_translated": getattr(agent, "last_was_translated", False),
+        "detected_language": getattr(agent, "last_detected_language", None),
         "category": req.category or "ALL",
         "total_results": len(filtered_results),
         "unfiltered_count": len(raw_results),
@@ -480,16 +499,20 @@ def get_recent_files(limit: int = 12, category: Optional[str] = None):
     db, _ = get_services()
     try:
         cat_name = category.capitalize() if (category and category.upper() != "ALL") else None
-        files = db.get_recent_files(category=cat_name, limit=limit)
+        files = db.get_recent_files(category=cat_name, limit=limit * 2)
         normalized = []
         for r in files:
-            fid = r.get("id") or r.get("file_id") or 0
             p_str = str(r.get("path") or "")
-            p_obj = Path(p_str) if p_str else None
+            if not p_str:
+                continue
+            p_obj = Path(p_str)
+            if not p_obj.exists():
+                continue
+            fid = r.get("id") or r.get("file_id") or 0
             r["file_id"] = fid
             r["id"] = fid
-            r["filename"] = r.get("filename") or (p_obj.name if p_obj else "Untitled")
-            ext = r.get("extension") or (p_obj.suffix if p_obj else "")
+            r["filename"] = r.get("filename") or p_obj.name
+            ext = r.get("extension") or p_obj.suffix
             r["extension"] = (ext or "").lower()
             cat = r.get("category") or r.get("file_type") or "File"
             r["category"] = cat
@@ -499,6 +522,8 @@ def get_recent_files(limit: int = 12, category: Optional[str] = None):
             r["relevance_score"] = 0.0
             r["match_evidence"] = {}
             normalized.append(r)
+            if len(normalized) >= limit:
+                break
         return {"files": normalized}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -513,6 +538,129 @@ def get_indexed_folders():
         return {"folders": db.folders_with_counts()}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/storage-analytics")
+def get_storage_analytics(privacy_token: Optional[str] = None):
+    db, agent = get_services()
+    pe = agent.privacy_engine
+    is_auth = pe.validate_session(privacy_token) if pe and privacy_token else False
+
+    with db.connection() as conn:
+        total_row = conn.execute("SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM files").fetchone()
+        total_files = total_row[0] or 0
+        total_bytes = total_row[1] or 0
+
+        prot_row = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM files WHERE privacy_state IN ('PROTECTED', 'HIDDEN')"
+        ).fetchone()
+        protected_files = prot_row[0] or 0
+        protected_bytes = prot_row[1] or 0
+
+        dup_row = conn.execute(
+            "SELECT COUNT(*), COALESCE(SUM(size_bytes), 0) FROM files WHERE duplicate_of_id IS NOT NULL"
+        ).fetchone()
+        duplicate_files = dup_row[0] or 0
+        duplicate_bytes = dup_row[1] or 0
+
+        cat_rows = conn.execute("""
+            SELECT file_type, extension, COUNT(*) as count, COALESCE(SUM(size_bytes), 0) as bytes
+            FROM files
+            GROUP BY file_type, extension
+            ORDER BY bytes DESC
+        """).fetchall()
+
+        category_map = {
+            "Videos": {"count": 0, "bytes": 0, "color": "#f43f5e"},
+            "Archives": {"count": 0, "bytes": 0, "color": "#f59e0b"},
+            "Documents": {"count": 0, "bytes": 0, "color": "#3b82f6"},
+            "Images": {"count": 0, "bytes": 0, "color": "#10b981"},
+            "Audio": {"count": 0, "bytes": 0, "color": "#8b5cf6"},
+            "Code": {"count": 0, "bytes": 0, "color": "#06b6d4"},
+            "Other": {"count": 0, "bytes": 0, "color": "#71717a"},
+        }
+        image_exts = {".jpg", ".jpeg", ".png", ".webp", ".bmp", ".gif", ".svg"}
+        video_exts = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".flv", ".wmv"}
+        audio_exts = {".mp3", ".wav", ".flac", ".m4a", ".aac", ".ogg"}
+        doc_exts = {".pdf", ".docx", ".doc", ".pptx", ".ppt", ".xlsx", ".xls", ".txt", ".csv"}
+        archive_exts = {".zip", ".rar", ".7z", ".tar", ".gz"}
+        code_exts = {".py", ".js", ".ts", ".tsx", ".jsx", ".html", ".css", ".json", ".sql", ".cpp", ".c", ".java"}
+
+        for r in cat_rows:
+            ext = (r["extension"] or "").lower()
+            cnt = r["count"]
+            b = r["bytes"]
+            if ext in video_exts:
+                category_map["Videos"]["count"] += cnt
+                category_map["Videos"]["bytes"] += b
+            elif ext in archive_exts:
+                category_map["Archives"]["count"] += cnt
+                category_map["Archives"]["bytes"] += b
+            elif ext in doc_exts:
+                category_map["Documents"]["count"] += cnt
+                category_map["Documents"]["bytes"] += b
+            elif ext in image_exts:
+                category_map["Images"]["count"] += cnt
+                category_map["Images"]["bytes"] += b
+            elif ext in audio_exts:
+                category_map["Audio"]["count"] += cnt
+                category_map["Audio"]["bytes"] += b
+            elif ext in code_exts:
+                category_map["Code"]["count"] += cnt
+                category_map["Code"]["bytes"] += b
+            else:
+                category_map["Other"]["count"] += cnt
+                category_map["Other"]["bytes"] += b
+
+        folder_rows = conn.execute("""
+            SELECT fo.path, COUNT(fi.id) as count, COALESCE(SUM(fi.size_bytes), 0) as bytes
+            FROM indexed_folders fo
+            LEFT JOIN files fi ON fi.folder_id = fo.id
+            GROUP BY fo.id
+            ORDER BY bytes DESC
+        """).fetchall()
+        folders = [
+            {"path": r["path"], "name": Path(r["path"]).name or r["path"], "count": r["count"], "bytes": r["bytes"]}
+            for r in folder_rows
+        ]
+
+        largest_rows = conn.execute("""
+            SELECT id, filename, path, size_bytes, extension, file_type, privacy_state
+            FROM files
+            ORDER BY size_bytes DESC
+            LIMIT 40
+        """).fetchall()
+        largest_files = []
+        for r in largest_rows:
+            p_obj = Path(r["path"])
+            if p_obj.exists():
+                is_file_prot = r["privacy_state"] in ("PROTECTED", "HIDDEN")
+                largest_files.append({
+                    "id": r["id"],
+                    "filename": r["filename"] if (not is_file_prot or is_auth) else f"Protected File{r['extension']}",
+                    "path": r["path"],
+                    "size_bytes": r["size_bytes"],
+                    "extension": r["extension"],
+                    "file_type": r["file_type"],
+                    "is_protected": is_file_prot,
+                })
+                if len(largest_files) >= 15:
+                    break
+
+    return {
+        "total_files": total_files,
+        "total_bytes": total_bytes,
+        "protected_files": protected_files,
+        "protected_bytes": protected_bytes,
+        "duplicate_files": duplicate_files,
+        "duplicate_bytes": duplicate_bytes,
+        "categories": [
+            {"name": k, "count": v["count"], "bytes": v["bytes"], "color": v["color"]}
+            for k, v in category_map.items() if v["count"] > 0
+        ],
+        "folders": folders,
+        "largest_files": largest_files,
+    }
 
 
 @app.post("/api/folders")
@@ -802,6 +950,194 @@ def name_cluster(cluster_id: int, req: NameClusterRequest):
     return {"status": "named", "person": person}
 
 
+@app.post("/api/persons/scan-faces")
+def scan_library_faces(force: bool = False):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    res = ps.scan_and_cluster_all_library_faces(force=force)
+    return res
+
+
+@app.post("/api/persons/reprocess-faces")
+def reprocess_faces(backup: bool = True):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    return ps.reprocess_all_faces(backup=backup, force=True)
+
+
+@app.get("/api/face-detections/{detection_id}/crop")
+def get_face_detection_crop(detection_id: int):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    crop_bytes = ps.get_detection_face_crop(detection_id)
+    if not crop_bytes:
+        raise HTTPException(status_code=404, detail="Face crop not found or image missing")
+    return Response(content=crop_bytes, media_type="image/jpeg")
+
+
+@app.get("/api/face-detections/unassigned")
+def get_unassigned_faces(limit: int = 100):
+    db, _ = get_services()
+    return {"unassigned_faces": db.get_unassigned_face_detections(limit=limit)}
+
+
+@app.get("/api/face-detections/review")
+def get_face_review_queue(limit: int = 150):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    return {"review_queue": ps.get_face_review_queue(limit=limit)}
+
+
+@app.get("/api/files/{file_id}/faces")
+def get_file_face_detections(file_id: int):
+    db, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+
+    record = db.get_file_by_id(file_id)
+    img_w, img_h = 0, 0
+    file_path = record.get("path") if record else None
+    if file_path:
+        try:
+            p = Path(file_path)
+            if p.is_file():
+                with Image.open(p) as img:
+                    img_w, img_h = img.size
+        except Exception:
+            pass
+
+    faces = ps.get_file_faces(file_id)
+    for f in faces:
+        if img_w > 0 and img_h > 0:
+            f["norm_x"] = round(f["box_x"] / img_w, 4)
+            f["norm_y"] = round(f["box_y"] / img_h, 4)
+            f["norm_w"] = round(f["box_w"] / img_w, 4)
+            f["norm_h"] = round(f["box_h"] / img_h, 4)
+        else:
+            f["norm_x"] = None
+            f["norm_y"] = None
+            f["norm_w"] = None
+            f["norm_h"] = None
+
+    return {
+        "file_id": file_id,
+        "image_width": img_w,
+        "image_height": img_h,
+        "path": file_path,
+        "faces": faces,
+    }
+
+
+@app.post("/api/face-detections/confirm-all")
+def confirm_all_face_detections(person_id: Optional[int] = None):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    count = ps.propagate_and_link_known_persons(target_person_id=person_id)
+    return {"status": "ok", "confirmed_count": count}
+
+
+@app.post("/api/face-detections/{detection_id}/create-person")
+def create_person_from_detection(detection_id: int, req: CreatePersonFromDetectionRequest):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    try:
+        res = ps.create_person_from_detection(
+            detection_id=detection_id,
+            name=req.name,
+            aliases=req.aliases,
+            notes=req.notes or "",
+        )
+        return res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/face-detections/{detection_id}/assign")
+def assign_face_detection(detection_id: int, person_id: int):
+    db, _ = get_services()
+    det = db.get_face_detection_by_id(detection_id)
+    if not det:
+        raise HTTPException(status_code=404, detail="Face detection not found")
+    db.assign_face_detection_to_person(detection_id, person_id, match_confidence=1.0)
+    return {"status": "assigned", "detection_id": detection_id, "person_id": person_id}
+
+
+class ConfirmFaceRequest(BaseModel):
+    person_id: Optional[int] = None
+
+
+@app.post("/api/face-detections/{detection_id}/confirm")
+def confirm_face_detection(
+    detection_id: int,
+    person_id: Optional[int] = Query(None),
+    req: Optional[ConfirmFaceRequest] = Body(None),
+):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    try:
+        target_pid = person_id
+        if target_pid is None and req is not None:
+            target_pid = req.person_id
+        return ps.confirm_face_detection(detection_id, person_id=target_pid)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/face-detections/{detection_id}/reject")
+def reject_face_detection(detection_id: int):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    try:
+        return ps.reject_face_detection(detection_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/face-detections/{detection_id}/keep-unknown")
+def keep_unknown_face_detection(detection_id: int):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    try:
+        return ps.keep_unknown_face_detection(detection_id)
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
+@app.post("/api/persons/{person_id}/reference-photos")
+def add_reference_photo_to_person(person_id: int, req: AddReferencePhotoRequest):
+    _, agent = get_services()
+    ps = agent.person_service
+    if not ps:
+        raise HTTPException(status_code=500, detail="PersonService not initialized")
+    try:
+        return ps.add_reference_photo_to_person(
+            person_id=person_id,
+            photo_path=req.photo_path,
+            detection_id=req.detection_id,
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+
 # ── Voice Search (Requirements 21, 22) ───────────────────────────────────────
 
 @app.post("/api/voice-search")
@@ -905,10 +1241,25 @@ def get_privacy_settings():
 
 @app.put("/api/privacy/settings")
 def update_privacy_settings(req: PrivacySettingsUpdateRequest):
-    db, _ = get_services()
+    db, agent = get_services()
     for k, v in req.settings.items():
         db.set_privacy_setting(k, str(v))
-    return {"status": "saved", "settings": db.get_all_privacy_settings()}
+    applied_counts = {}
+    if agent.privacy_engine:
+        try:
+            applied_counts = agent.privacy_engine.apply_policies_to_all_files()
+        except Exception:
+            pass
+    return {"status": "saved", "settings": db.get_all_privacy_settings(), "applied_counts": applied_counts}
+
+
+@app.post("/api/privacy/apply-policies")
+def apply_privacy_policies():
+    _, agent = get_services()
+    if not agent.privacy_engine:
+        raise HTTPException(status_code=500, detail="PrivacyEngine not initialized")
+    counts = agent.privacy_engine.apply_policies_to_all_files()
+    return {"status": "applied", "classified_counts": counts}
 
 
 @app.post("/api/files/{file_id}/privacy")

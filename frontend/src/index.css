@@ -169,6 +169,14 @@ button[class*="hover:text-zinc-950"]:hover {
   background: rgba(255, 255, 255, 0.025); color: rgba(255, 255, 255, 0.64); font-size: 11px; text-align: left; cursor: pointer;
 }
 .sidebar-footer > button:hover { color: white; background: rgba(255, 255, 255, 0.055); }
+.sidebar-footer > button.sidebar-privacy-btn {
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  height: 38px !important;
+  margin-bottom: 6px !important;
+  padding: 0 10px !important;
+}
 .sidebar-footer > button svg:last-child { color: rgba(255, 255, 255, 0.2); }
 .storage-copy { margin: 12px 3px 6px; display: flex; justify-content: space-between; color: rgba(255, 255, 255, 0.28); font-size: 8.5px; }
 .storage-bar { height: 2px; margin: 0 3px; border-radius: 2px; background: rgba(255, 255, 255, 0.06); overflow: hidden; }

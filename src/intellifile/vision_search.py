@@ -93,7 +93,10 @@ def search_images_with_clip(
     try:
         # Multi-prompt ensembling (Radford et al. 2021) to stabilize CLIP zero-shot retrieval
         # and resolve attribute-binding compositionality failures
-        clean_p = prompt.strip()
+        if isinstance(prompt, (list, tuple, set)):
+            clean_p = " ".join(str(x) for x in prompt).strip()
+        else:
+            clean_p = str(prompt).strip()
         prompts = [clean_p, f"a photo of {clean_p}"]
 
         words = clean_p.lower().split()

@@ -39,3 +39,4 @@ models/*.onnx
 Thumbs.db
 desktop.ini
 .env
+tests/annotated_validation/

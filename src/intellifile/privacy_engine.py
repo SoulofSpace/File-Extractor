@@ -265,6 +265,50 @@ class PrivacyEngine:
 
         return "NONE", "NORMAL", 0.0
 
+    def apply_policies_to_all_files(self) -> Dict[str, int]:
+        """
+        Re-scans all indexed files and applies privacy policies based on current settings.
+        Updates files.privacy_state and files.sensitivity_class.
+        Returns summary of classified counts.
+        """
+        counts = {"ID_DOCUMENT": 0, "BANKING_FINANCE": 0, "CONFIDENTIAL": 0, "PERSONAL_INFO": 0, "NORMAL": 0}
+        with self.db.connection() as conn:
+            files = conn.execute("SELECT id, filename, path, extracted_text, ocr_text FROM files").fetchall()
+            for f in files:
+                file_id = f["id"]
+                priv_row = conn.execute(
+                    "SELECT manual_override, privacy_state FROM file_privacy WHERE file_id = ?",
+                    (file_id,)
+                ).fetchone()
+                if priv_row and priv_row["manual_override"]:
+                    continue
+
+                comb_text = f"{f['extracted_text'] or ''} {f['ocr_text'] or ''}"
+                s_class, suggested_state, conf = self.scan_sensitivity(comb_text, filename=f["filename"])
+
+                conn.execute(
+                    "UPDATE files SET sensitivity_class = ?, privacy_state = ? WHERE id = ?",
+                    (s_class if s_class != "NONE" else None, suggested_state, file_id)
+                )
+                conn.execute(
+                    """
+                    INSERT INTO file_privacy (file_id, privacy_state, sensitivity_class, manual_override, updated_at)
+                    VALUES (?, ?, ?, 0, ?)
+                    ON CONFLICT(file_id) DO UPDATE SET
+                        privacy_state = excluded.privacy_state,
+                        sensitivity_class = excluded.sensitivity_class,
+                        updated_at = excluded.updated_at
+                    WHERE manual_override = 0
+                    """,
+                    (file_id, suggested_state, s_class if s_class != "NONE" else None, self.db.now())
+                )
+                if suggested_state == "PROTECTED":
+                    counts[s_class] = counts.get(s_class, 0) + 1
+                else:
+                    counts["NORMAL"] += 1
+
+        return counts
+
     # ── PRIVACY ACCESS SCOPE & SANITIZATION ───────────────────────────────────
 
     def get_privacy_scope(self, is_authenticated: bool) -> str:

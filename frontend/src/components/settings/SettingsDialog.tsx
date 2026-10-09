@@ -39,15 +39,38 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
     apiClient.getPrivacyStatus(privacyToken).then(setPrivacyStatus).catch(() => {});
   }, [privacyToken]);
 
+  const [isApplyingPolicies, setIsApplyingPolicies] = useState(false);
+
   const handleUpdateSetting = async (key: string, value: string) => {
     const updated = { ...privacySettings, [key]: value };
     setPrivacySettings(updated);
     try {
-      await apiClient.updatePrivacySettings(updated);
-      setPrivacyNotice('Settings updated');
-      setTimeout(() => setPrivacyNotice(''), 2000);
+      const res = await apiClient.updatePrivacySettings(updated);
+      const applied = (res as any).applied_counts;
+      if (applied) {
+        const protCount = (applied.ID_DOCUMENT || 0) + (applied.BANKING_FINANCE || 0) + (applied.CONFIDENTIAL || 0);
+        setPrivacyNotice(`Policies updated: ${protCount} sensitive files protected`);
+      } else {
+        setPrivacyNotice('Settings updated');
+      }
+      setTimeout(() => setPrivacyNotice(''), 3000);
     } catch (err: any) {
       console.error('Failed to update privacy setting:', err);
+    }
+  };
+
+  const handleApplyPoliciesNow = async () => {
+    setIsApplyingPolicies(true);
+    try {
+      const res = await apiClient.applyPrivacyPolicies();
+      const counts = res.classified_counts || {};
+      const protCount = (counts.ID_DOCUMENT || 0) + (counts.BANKING_FINANCE || 0) + (counts.CONFIDENTIAL || 0);
+      setPrivacyNotice(`Privacy scan complete: ${protCount} files protected (${counts.ID_DOCUMENT || 0} IDs, ${counts.BANKING_FINANCE || 0} Banking, ${counts.CONFIDENTIAL || 0} Confidential)`);
+      setTimeout(() => setPrivacyNotice(''), 5000);
+    } catch (err: any) {
+      alert(err.message || 'Failed to scan files');
+    } finally {
+      setIsApplyingPolicies(false);
     }
   };
 
@@ -335,12 +358,24 @@ export const SettingsDialog: React.FC<SettingsDialogProps> = ({
 
           {/* Category Protection Toggles (Requirement 26) */}
           <div className="space-y-3">
-            <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
-              Category Auto-Protection Policies
-            </h4>
-            <p className="text-xs text-zinc-500">
-              When enabled, files automatically classified into these categories receive PROTECTED status.
-            </p>
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+              <div>
+                <h4 className="text-xs font-semibold text-zinc-400 uppercase tracking-wider">
+                  Category Auto-Protection Policies
+                </h4>
+                <p className="text-xs text-zinc-500">
+                  When enabled, files automatically classified into these categories receive PROTECTED status.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleApplyPoliciesNow}
+                disabled={isApplyingPolicies}
+                className="px-3.5 py-1.5 bg-emerald-600/20 hover:bg-emerald-600/30 text-emerald-300 text-xs font-semibold rounded-xl border border-emerald-500/30 transition-colors shrink-0"
+              >
+                {isApplyingPolicies ? 'Scanning...' : 'Scan & Protect Files Now'}
+              </button>
+            </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               {[

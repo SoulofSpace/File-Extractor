@@ -260,6 +260,15 @@ class Database:
         if "sensitivity_class" not in file_cols:
             conn.execute("ALTER TABLE files ADD COLUMN sensitivity_class TEXT")
 
+        # Migrate face_detections columns if table already exists
+        has_face_tbl = bool(conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='face_detections'").fetchone())
+        if has_face_tbl:
+            face_cols = {r["name"] for r in conn.execute("PRAGMA table_info(face_detections)").fetchall()}
+            if "face_quality" not in face_cols:
+                conn.execute("ALTER TABLE face_detections ADD COLUMN face_quality REAL")
+            if "landmarks_json" not in face_cols:
+                conn.execute("ALTER TABLE face_detections ADD COLUMN landmarks_json TEXT")
+
         conn.executescript(
             """
             CREATE INDEX IF NOT EXISTS idx_files_privacy ON files(privacy_state);
@@ -299,6 +308,8 @@ class Database:
                 embedding BLOB NOT NULL,
                 person_id INTEGER REFERENCES persons(id) ON DELETE SET NULL,
                 match_confidence REAL,
+                face_quality REAL,
+                landmarks_json TEXT,
                 created_at TEXT NOT NULL
             );
             CREATE INDEX IF NOT EXISTS idx_face_file ON face_detections(file_id);
@@ -599,6 +610,29 @@ class Database:
         with self.connection() as conn:
             return conn.execute("SELECT COUNT(*) FROM files").fetchone()[0]
 
+    def reconcile_missing_files(self) -> int:
+        """Removes database records for files that no longer exist on disk."""
+        import os
+        removed = 0
+        with self.connection() as conn:
+            rows = conn.execute("SELECT id, path FROM files").fetchall()
+            for r in rows:
+                p = r["path"]
+                if not os.path.exists(p):
+                    fid = r["id"]
+                    conn.execute("DELETE FROM files WHERE id = ?", (fid,))
+                    conn.execute("DELETE FROM content_pages WHERE file_id = ?", (fid,))
+                    conn.execute("DELETE FROM document_understanding WHERE file_id = ?", (fid,))
+                    conn.execute("DELETE FROM face_detections WHERE file_id = ?", (fid,))
+                    conn.execute("DELETE FROM person_file_links WHERE file_id = ?", (fid,))
+                    conn.execute("DELETE FROM file_privacy WHERE file_id = ?", (fid,))
+                    try:
+                        conn.execute("DELETE FROM file_search WHERE rowid = ?", (fid,))
+                    except Exception:
+                        pass
+                    removed += 1
+        return removed
+
     def total_folder_count(self) -> int:
         with self.connection() as conn:
             return conn.execute("SELECT COUNT(*) FROM indexed_folders").fetchone()[0]
@@ -628,19 +662,46 @@ class Database:
         query_plan_summary: str = "",
     ) -> None:
         """Records a search query for history dropdown without logging document text."""
+        clean_q = (query_text or "").strip()
+        if not clean_q:
+            return
         with self.connection() as conn:
+            # Check if identical query was already logged very recently
+            last_row = conn.execute(
+                "SELECT query_text FROM search_history ORDER BY id DESC LIMIT 1"
+            ).fetchone()
+            if last_row and last_row["query_text"] == clean_q:
+                return
+
             conn.execute(
                 """
                 INSERT INTO search_history (query_text, query_plan_summary, result_count, execution_time_ms, searched_at)
                 VALUES (?, ?, ?, ?, ?)
                 """,
-                (query_text.strip(), query_plan_summary, result_count, execution_time_ms, self.now()),
+                (clean_q, query_plan_summary, result_count, execution_time_ms, self.now()),
             )
 
     def get_search_history(self, limit: int = 15) -> list[dict]:
         with self.connection() as conn:
             rows = conn.execute(
-                "SELECT * FROM search_history ORDER BY id DESC LIMIT ?", (limit,)
+                """
+                SELECT MAX(id) AS id,
+                       query_text,
+                       query_text AS query,
+                       MAX(query_plan_summary) AS query_plan_summary,
+                       MAX(query_plan_summary) AS summary,
+                       MAX(result_count) AS result_count,
+                       MAX(execution_time_ms) AS execution_time_ms,
+                       MAX(execution_time_ms) AS latency_ms,
+                       MAX(searched_at) AS searched_at,
+                       MAX(searched_at) AS created_at
+                FROM search_history
+                WHERE query_text IS NOT NULL AND trim(query_text) != ''
+                GROUP BY query_text
+                ORDER BY id DESC
+                LIMIT ?
+                """,
+                (limit,),
             ).fetchall()
             return [dict(r) for r in rows]
 
@@ -1037,6 +1098,25 @@ class Database:
         now = self.now()
         name_clean = name.strip()
         with self.connection() as conn:
+            if not is_cluster:
+                # Deduplicate: if an enrolled person with this name already exists, reuse it!
+                existing = conn.execute(
+                    "SELECT id FROM persons WHERE LOWER(TRIM(name)) = LOWER(?) AND is_cluster = 0 LIMIT 1",
+                    (name_clean,),
+                ).fetchone()
+                if existing:
+                    person_id = existing["id"]
+                    if avatar_file_id:
+                        conn.execute("UPDATE persons SET avatar_file_id = ? WHERE id = ? AND avatar_file_id IS NULL", (avatar_file_id, person_id))
+                    if notes:
+                        conn.execute("UPDATE persons SET notes = COALESCE(notes || '\n', '') || ? WHERE id = ?", (notes, person_id))
+                    if aliases:
+                        for a in aliases:
+                            alias_str = a.strip()
+                            if alias_str and alias_str.lower() != name_clean.lower():
+                                conn.execute("INSERT OR IGNORE INTO person_aliases (person_id, alias) VALUES (?, ?)", (person_id, alias_str))
+                    return person_id
+
             cur = conn.execute(
                 """
                 INSERT INTO persons (name, is_cluster, cluster_label, notes, avatar_file_id, created_at, updated_at)
@@ -1055,9 +1135,28 @@ class Database:
                         )
             return person_id
 
+    def get_person_by_name(self, name: str) -> Optional[dict]:
+        with self.connection() as conn:
+            row = conn.execute(
+                """
+                SELECT p.*,
+                       (SELECT fd.id FROM face_detections fd WHERE fd.person_id = p.id ORDER BY fd.face_quality DESC, fd.confidence DESC LIMIT 1) AS primary_face_detection_id
+                FROM persons p WHERE LOWER(TRIM(p.name)) = LOWER(?) AND p.is_cluster = 0 LIMIT 1
+                """,
+                (name.strip(),),
+            ).fetchone()
+            return dict(row) if row else None
+
     def get_person(self, person_id: int) -> Optional[dict]:
         with self.connection() as conn:
-            row = conn.execute("SELECT * FROM persons WHERE id = ?", (person_id,)).fetchone()
+            row = conn.execute(
+                """
+                SELECT p.*,
+                       (SELECT fd.id FROM face_detections fd WHERE fd.person_id = p.id ORDER BY fd.face_quality DESC, fd.confidence DESC LIMIT 1) AS primary_face_detection_id
+                FROM persons p WHERE p.id = ?
+                """,
+                (person_id,),
+            ).fetchone()
             if not row:
                 return None
             p = dict(row)
@@ -1072,6 +1171,7 @@ class Database:
         hidden_filter = "AND f.privacy_state != 'HIDDEN'" if privacy_scope != "PRIVATE" else ""
         sql = f"""
             SELECT p.*,
+                   (SELECT fd.id FROM face_detections fd WHERE fd.person_id = p.id ORDER BY fd.face_quality DESC, fd.confidence DESC LIMIT 1) AS primary_face_detection_id,
                    COUNT(DISTINCT CASE WHEN pfl.link_type = 'face' {hidden_filter} THEN pfl.file_id END) AS photo_count,
                    COUNT(DISTINCT CASE WHEN pfl.link_type IN ('ocr', 'filename', 'entity') {hidden_filter} THEN pfl.file_id END) AS doc_count,
                    COUNT(DISTINCT CASE WHEN 1=1 {hidden_filter} THEN pfl.file_id END) AS total_files_count
@@ -1226,14 +1326,31 @@ class Database:
         return new_pid
 
     def name_cluster(self, cluster_id: int, person_name: str) -> int:
-        """Names an unknown cluster as an approved person identity."""
+        """Names an unknown cluster as an approved person identity. Auto-merges if person exists."""
         now = self.now()
+        name_clean = person_name.strip()
         with self.connection() as conn:
+            existing = conn.execute(
+                "SELECT id FROM persons WHERE LOWER(TRIM(name)) = LOWER(?) AND is_cluster = 0 AND id != ? LIMIT 1",
+                (name_clean, cluster_id),
+            ).fetchone()
+            if existing:
+                target_pid = existing["id"]
+                conn.execute("UPDATE face_detections SET person_id = ? WHERE person_id = ?", (target_pid, cluster_id))
+                conn.execute("UPDATE person_embeddings SET person_id = ? WHERE person_id = ?", (target_pid, cluster_id))
+                conn.execute(
+                    "UPDATE OR IGNORE person_file_links SET person_id = ? WHERE person_id = ?",
+                    (target_pid, cluster_id),
+                )
+                conn.execute("DELETE FROM person_file_links WHERE person_id = ?", (cluster_id,))
+                conn.execute("DELETE FROM persons WHERE id = ?", (cluster_id,))
+                return target_pid
+
             conn.execute(
                 "UPDATE persons SET name = ?, is_cluster = 0, updated_at = ? WHERE id = ?",
-                (person_name.strip(), now, cluster_id),
+                (name_clean, now, cluster_id),
             )
-        return cluster_id
+            return cluster_id
 
     # ── V4 Face Detections & Embeddings ───────────────────────────────────────
 
@@ -1248,15 +1365,19 @@ class Database:
         embedding: bytes,
         person_id: Optional[int] = None,
         match_confidence: Optional[float] = None,
+        face_quality: Optional[float] = None,
+        landmarks: Optional[List[Tuple[float, float]]] = None,
     ) -> int:
+        import json
         now = self.now()
+        lm_str = json.dumps(landmarks) if landmarks else None
         with self.connection() as conn:
             cur = conn.execute(
                 """
-                INSERT INTO face_detections (file_id, box_x, box_y, box_w, box_h, confidence, embedding, person_id, match_confidence, created_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO face_detections (file_id, box_x, box_y, box_w, box_h, confidence, embedding, person_id, match_confidence, face_quality, landmarks_json, created_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """,
-                (file_id, box_x, box_y, box_w, box_h, confidence, embedding, person_id, match_confidence, now),
+                (file_id, box_x, box_y, box_w, box_h, confidence, embedding, person_id, match_confidence, face_quality, lm_str, now),
             )
             return cur.lastrowid
 
@@ -1275,6 +1396,158 @@ class Database:
             else:
                 rows = conn.execute("SELECT * FROM face_detections ORDER BY id").fetchall()
             return [dict(r) for r in rows]
+
+    def get_face_detection_by_id(self, detection_id: int) -> Optional[dict]:
+        with self.connection() as conn:
+            row = conn.execute("SELECT * FROM face_detections WHERE id = ?", (detection_id,)).fetchone()
+            return dict(row) if row else None
+
+    def get_unassigned_face_detections(self, limit: int = 200) -> List[dict]:
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT fd.*, f.filename, f.path
+                FROM face_detections fd
+                JOIN files f ON fd.file_id = f.id
+                WHERE fd.person_id IS NULL
+                ORDER BY fd.confidence DESC, fd.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_file_face_detections(self, file_id: int) -> List[dict]:
+        """Returns all face detections for a specific file with linked person metadata."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT fd.id, fd.file_id, fd.box_x, fd.box_y, fd.box_w, fd.box_h,
+                       fd.confidence, fd.match_confidence, fd.face_quality,
+                       fd.landmarks_json, fd.person_id, fd.created_at,
+                       p.name AS person_name, p.is_cluster,
+                       pfl.is_confirmed AS link_confirmed
+                FROM face_detections fd
+                LEFT JOIN persons p ON fd.person_id = p.id
+                LEFT JOIN person_file_links pfl ON pfl.person_id = fd.person_id AND pfl.file_id = fd.file_id AND pfl.link_type = 'face'
+                WHERE fd.file_id = ?
+                ORDER BY fd.id ASC
+                """,
+                (file_id,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def get_face_review_queue(self, limit: int = 150) -> List[dict]:
+        """Returns face detections needing review: unassigned, cluster assigned, or unconfirmed matches."""
+        with self.connection() as conn:
+            rows = conn.execute(
+                """
+                SELECT fd.id, fd.file_id, fd.box_x, fd.box_y, fd.box_w, fd.box_h,
+                       fd.confidence, fd.match_confidence, fd.face_quality,
+                       fd.landmarks_json, fd.person_id, fd.created_at,
+                       f.filename, f.path, f.privacy_state,
+                       p.name AS person_name, p.is_cluster,
+                       pfl.is_confirmed AS link_confirmed
+                FROM face_detections fd
+                JOIN files f ON fd.file_id = f.id
+                LEFT JOIN persons p ON fd.person_id = p.id
+                LEFT JOIN person_file_links pfl ON pfl.person_id = fd.person_id AND pfl.file_id = fd.file_id AND pfl.link_type = 'face'
+                WHERE fd.person_id IS NULL 
+                   OR p.is_cluster = 1
+                   OR pfl.is_confirmed = 0
+                ORDER BY 
+                   CASE WHEN fd.person_id IS NULL THEN 0 ELSE 1 END ASC,
+                   fd.face_quality DESC,
+                   fd.confidence DESC,
+                   fd.id DESC
+                LIMIT ?
+                """,
+                (limit,),
+            ).fetchall()
+            return [dict(r) for r in rows]
+
+    def clean_missing_face_files(self) -> int:
+        """Removes face detections and face links for files that no longer exist on disk."""
+        removed_count = 0
+        with self.connection() as conn:
+            rows = conn.execute("SELECT id, path FROM files WHERE id IN (SELECT DISTINCT file_id FROM face_detections)").fetchall()
+            missing_ids = []
+            for r in rows:
+                if not Path(r["path"]).is_file():
+                    missing_ids.append(r["id"])
+            if missing_ids:
+                pl = ",".join("?" for _ in missing_ids)
+                conn.execute(f"DELETE FROM face_detections WHERE file_id IN ({pl})", missing_ids)
+                conn.execute(f"DELETE FROM person_file_links WHERE file_id IN ({pl}) AND link_type = 'face'", missing_ids)
+                removed_count = len(missing_ids)
+        return removed_count
+
+    def assign_face_detection_to_person(
+        self, detection_id: int, person_id: int, match_confidence: float = 1.0
+    ) -> None:
+        """Assigns a single face detection to a person identity without affecting other faces."""
+        now = self.now()
+        with self.connection() as conn:
+            # 1. Update the face detection record
+            conn.execute(
+                """
+                UPDATE face_detections
+                SET person_id = ?, match_confidence = ?
+                WHERE id = ?
+                """,
+                (person_id, match_confidence, detection_id),
+            )
+            # 2. Get file_id for linking
+            row = conn.execute("SELECT file_id FROM face_detections WHERE id = ?", (detection_id,)).fetchone()
+            if row:
+                fid = row["file_id"]
+                conn.execute(
+                    """
+                    INSERT INTO person_file_links (person_id, file_id, link_type, confidence, is_confirmed, notes, created_at)
+                    VALUES (?, ?, 'face', ?, 1, 'Manual face assignment', ?)
+                    ON CONFLICT(person_id, file_id, link_type) DO UPDATE SET
+                        confidence = MAX(confidence, excluded.confidence),
+                        is_confirmed = 1
+                    """,
+                    (person_id, fid, match_confidence, now),
+                )
+
+    def rebuild_person_file_links_from_detections(self, target_person_id: Optional[int] = None) -> None:
+        """Rebuilds person_file_links strictly from confirmed face detections."""
+        now = self.now()
+        with self.connection() as conn:
+            if target_person_id is not None:
+                conn.execute("DELETE FROM person_file_links WHERE person_id = ? AND link_type = 'face'", (target_person_id,))
+                rows = conn.execute(
+                    """
+                    SELECT person_id, file_id, MAX(confidence) as max_conf
+                    FROM face_detections
+                    WHERE person_id = ? AND person_id IS NOT NULL
+                    GROUP BY person_id, file_id
+                    """,
+                    (target_person_id,),
+                ).fetchall()
+            else:
+                conn.execute("DELETE FROM person_file_links WHERE link_type = 'face'")
+                rows = conn.execute(
+                    """
+                    SELECT person_id, file_id, MAX(confidence) as max_conf
+                    FROM face_detections
+                    WHERE person_id IS NOT NULL
+                    GROUP BY person_id, file_id
+                    """
+                ).fetchall()
+
+            for r in rows:
+                conn.execute(
+                    """
+                    INSERT INTO person_file_links (person_id, file_id, link_type, confidence, is_confirmed, notes, created_at)
+                    VALUES (?, ?, 'face', ?, 1, 'Rebuilt from face detections', ?)
+                    ON CONFLICT(person_id, file_id, link_type) DO UPDATE SET
+                        confidence = MAX(confidence, excluded.confidence)
+                    """,
+                    (r["person_id"], r["file_id"], r["max_conf"], now),
+                )
 
     def add_person_embedding(
         self,
@@ -1331,7 +1604,13 @@ class Database:
     def get_person_files(self, person_id: int, privacy_scope: str = "NORMAL") -> List[dict]:
         hidden_filter = "AND f.privacy_state != 'HIDDEN'" if privacy_scope != "PRIVATE" else ""
         sql = f"""
-            SELECT f.*, pfl.link_type, pfl.confidence AS link_confidence, pfl.is_confirmed AS link_confirmed
+            SELECT f.*,
+                   f.id AS file_id,
+                   pfl.link_type,
+                   pfl.confidence,
+                   pfl.confidence AS link_confidence,
+                   pfl.is_confirmed,
+                   pfl.is_confirmed AS link_confirmed
             FROM person_file_links pfl
             JOIN files f ON pfl.file_id = f.id
             WHERE pfl.person_id = ? {hidden_filter}
